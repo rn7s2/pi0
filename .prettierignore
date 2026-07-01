@@ -1,0 +1,17 @@
+# dependencies
+node_modules
+native/node_modules
+
+# build output
+out
+dist
+.webpack
+native/target
+
+# lock files
+package-lock.json
+native/package-lock.json
+
+# generated (napi-rs)
+native/index.d.ts
+native/index.js

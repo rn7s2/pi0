@@ -14,66 +14,66 @@ import { mainConfig } from './webpack.main.config';
 import { rendererConfig } from './webpack.renderer.config';
 
 const config: ForgeConfig = {
-  packagerConfig: {
-    asar: true,
-    // pi0 needs macOS 14+ for ScreenCaptureKit (SCScreenshotManager.captureImage).
-    appBundleId: 'com.pi0.app',
-  },
-  rebuildConfig: {},
-  hooks: {
-    // Build the Rust native addon (@pi0/native) before webpack bundles the main
-    // process, so the generated .node is present for the asset relocator.
-    generateAssets: async () => {
-      execSync('npm run build:native', { stdio: 'inherit' });
+    packagerConfig: {
+        asar: true,
+        // pi0 needs macOS 14+ for ScreenCaptureKit (SCScreenshotManager.captureImage).
+        appBundleId: 'com.pi0.app',
     },
-  },
-  makers: [
-    new MakerSquirrel({}),
-    new MakerZIP({}, ['darwin']),
-    new MakerRpm({}),
-    new MakerDeb({}),
-  ],
-  plugins: [
-    new AutoUnpackNativesPlugin({}),
-    new WebpackPlugin({
-      // resolve default logger port (9000) collision
-      loggerPort: 18123,
-      mainConfig,
-      renderer: {
-        config: rendererConfig,
-        entryPoints: [
-          {
-            html: './src/index.html',
-            js: './src/renderer.tsx',
-            name: 'main_window',
-            preload: {
-              js: './src/preload.ts',
+    rebuildConfig: {},
+    hooks: {
+        // Build the Rust native addon (@pi0/native) before webpack bundles the main
+        // process, so the generated .node is present for the asset relocator.
+        generateAssets: async () => {
+            execSync('npm run build:native', { stdio: 'inherit' });
+        },
+    },
+    makers: [
+        new MakerSquirrel({}),
+        new MakerZIP({}, ['darwin']),
+        new MakerRpm({}),
+        new MakerDeb({}),
+    ],
+    plugins: [
+        new AutoUnpackNativesPlugin({}),
+        new WebpackPlugin({
+            // resolve default logger port (9000) collision
+            loggerPort: 18123,
+            mainConfig,
+            renderer: {
+                config: rendererConfig,
+                entryPoints: [
+                    {
+                        html: './src/index.html',
+                        js: './src/renderer.tsx',
+                        name: 'main_window',
+                        preload: {
+                            js: './src/preload.ts',
+                        },
+                    },
+                    {
+                        // Tray float panel — its own renderer, same preload/IPC surface.
+                        html: './src/index.html',
+                        js: './src/panel.tsx',
+                        name: 'panel_window',
+                        preload: {
+                            js: './src/preload.ts',
+                        },
+                    },
+                ],
             },
-          },
-          {
-            // Tray float panel — its own renderer, same preload/IPC surface.
-            html: './src/index.html',
-            js: './src/panel.tsx',
-            name: 'panel_window',
-            preload: {
-              js: './src/preload.ts',
-            },
-          },
-        ],
-      },
-    }),
-    // Fuses are used to enable/disable various Electron functionality
-    // at package time, before code signing the application
-    new FusesPlugin({
-      version: FuseVersion.V1,
-      [FuseV1Options.RunAsNode]: false,
-      [FuseV1Options.EnableCookieEncryption]: true,
-      [FuseV1Options.EnableNodeOptionsEnvironmentVariable]: false,
-      [FuseV1Options.EnableNodeCliInspectArguments]: false,
-      [FuseV1Options.EnableEmbeddedAsarIntegrityValidation]: true,
-      [FuseV1Options.OnlyLoadAppFromAsar]: true,
-    }),
-  ],
+        }),
+        // Fuses are used to enable/disable various Electron functionality
+        // at package time, before code signing the application
+        new FusesPlugin({
+            version: FuseVersion.V1,
+            [FuseV1Options.RunAsNode]: false,
+            [FuseV1Options.EnableCookieEncryption]: true,
+            [FuseV1Options.EnableNodeOptionsEnvironmentVariable]: false,
+            [FuseV1Options.EnableNodeCliInspectArguments]: false,
+            [FuseV1Options.EnableEmbeddedAsarIntegrityValidation]: true,
+            [FuseV1Options.OnlyLoadAppFromAsar]: true,
+        }),
+    ],
 };
 
 export default config;

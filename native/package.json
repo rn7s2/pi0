@@ -1,22 +1,22 @@
 {
-  "name": "@pi0/native",
-  "version": "1.0.0",
-  "description": "pi0 native addon (keylogger, screenshots, data store)",
-  "main": "index.js",
-  "types": "index.d.ts",
-  "napi": {
-    "name": "pi0-native"
-  },
-  "files": [
-    "index.js",
-    "index.d.ts",
-    "*.node"
-  ],
-  "scripts": {
-    "build": "napi build --platform --release",
-    "build:debug": "napi build --platform"
-  },
-  "devDependencies": {
-    "@napi-rs/cli": "^2.18.4"
-  }
+    "name": "@pi0/native",
+    "version": "1.0.0",
+    "description": "pi0 native addon (keylogger, screenshots, data store)",
+    "main": "index.js",
+    "types": "index.d.ts",
+    "napi": {
+        "name": "pi0-native"
+    },
+    "files": [
+        "index.js",
+        "index.d.ts",
+        "*.node"
+    ],
+    "scripts": {
+        "build": "napi build --platform --release",
+        "build:debug": "napi build --platform"
+    },
+    "devDependencies": {
+        "@napi-rs/cli": "^2.18.4"
+    }
 }

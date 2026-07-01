@@ -10,34 +10,34 @@ import { app } from 'electron';
 import { Settings, SettingsSchema } from '../shared/schemas';
 
 function settingsPath(): string {
-  return path.join(app.getPath('userData'), 'settings.json');
+    return path.join(app.getPath('userData'), 'settings.json');
 }
 
 export function defaultDataDir(): string {
-  return path.join(app.getPath('userData'), 'pi0-data');
+    return path.join(app.getPath('userData'), 'pi0-data');
 }
 
 /** Load settings, falling back to (and filling) defaults on missing/invalid file. */
 export async function loadSettings(): Promise<Settings> {
-  const dataDir = defaultDataDir();
-  try {
-    const raw = await fs.readFile(settingsPath(), 'utf8');
-    // Saved values win over the default dataDir; zod fills any missing fields.
-    const parsed = SettingsSchema.safeParse({ dataDir, ...JSON.parse(raw) });
-    if (parsed.success) {
-      return parsed.data;
+    const dataDir = defaultDataDir();
+    try {
+        const raw = await fs.readFile(settingsPath(), 'utf8');
+        // Saved values win over the default dataDir; zod fills any missing fields.
+        const parsed = SettingsSchema.safeParse({ dataDir, ...JSON.parse(raw) });
+        if (parsed.success) {
+            return parsed.data;
+        }
+        console.error('[pi0] invalid settings.json, using defaults:', parsed.error.message);
+    } catch {
+        // Missing file → defaults.
     }
-    console.error('[pi0] invalid settings.json, using defaults:', parsed.error.message);
-  } catch {
-    // Missing file → defaults.
-  }
-  return SettingsSchema.parse({ dataDir });
+    return SettingsSchema.parse({ dataDir });
 }
 
 /** Validate and persist settings; returns the normalized value. */
 export async function saveSettings(input: unknown): Promise<Settings> {
-  const settings = SettingsSchema.parse(input);
-  await fs.mkdir(app.getPath('userData'), { recursive: true });
-  await fs.writeFile(settingsPath(), JSON.stringify(settings, null, 2), 'utf8');
-  return settings;
+    const settings = SettingsSchema.parse(input);
+    await fs.mkdir(app.getPath('userData'), { recursive: true });
+    await fs.writeFile(settingsPath(), JSON.stringify(settings, null, 2), 'utf8');
+    return settings;
 }

@@ -5,5 +5,5 @@ import './panel.css';
 
 const container = document.getElementById('root');
 if (container) {
-  createRoot(container).render(<FloatPanel />);
+    createRoot(container).render(<FloatPanel />);
 }
