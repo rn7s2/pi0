@@ -4,6 +4,19 @@ let's design a personal intelligence workbench. I call this pi0 for now. It coul
 
 do make the plan clean, short and easy to understand.
 
+## milestone 2, 20260701-2
+
+### functionality requirements
+
+- should have a tray icon, after which clicked popup a float panel
+- for the float panel, 3 rows
+  - 1st row, after clicked, toggle main window show and hide
+  - a toggle switch is provided to switch record on and off
+  - 3rd row, exit whole application
+- a guard modal dialog each time booting, must check for all permission before entering app
+
+### technical requirements
+
 ## milestone 1, 20260701-1
 
 ### functionality requirements

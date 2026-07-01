@@ -50,6 +50,15 @@ const config: ForgeConfig = {
               js: './src/preload.ts',
             },
           },
+          {
+            // Tray float panel — its own renderer, same preload/IPC surface.
+            html: './src/index.html',
+            js: './src/panel.tsx',
+            name: 'panel_window',
+            preload: {
+              js: './src/preload.ts',
+            },
+          },
         ],
       },
     }),

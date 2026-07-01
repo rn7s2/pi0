@@ -1,22 +1,31 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { DataViewer } from './DataViewer';
+import { PermissionGuard } from './PermissionGuard';
 import { SettingsView } from './SettingsView';
 
 type Tab = 'data' | 'settings';
+// 'checking' → probing perms; 'guard' → blocking modal; 'ready' → app usable.
+type Phase = 'checking' | 'guard' | 'ready';
 
 export function App() {
   const [running, setRunning] = useState(false);
   const [busy, setBusy] = useState(false);
   const [tab, setTab] = useState<Tab>('data');
+  const [phase, setPhase] = useState<Phase>('checking');
 
-  const refreshRunning = useCallback(async () => {
-    setRunning(await window.pi0.isRunning());
+  // Boot gate: skip the modal entirely when both grants are already in place.
+  useEffect(() => {
+    void window.pi0.permissionsStatus().then((p) => {
+      setPhase(p.inputMonitoring && p.screenRecording ? 'ready' : 'guard');
+    });
   }, []);
 
   useEffect(() => {
-    void refreshRunning();
-  }, [refreshRunning]);
+    void window.pi0.isRunning().then(setRunning);
+    // Stay in sync when recording is toggled from the tray float panel.
+    return window.pi0.onRunningChanged(setRunning);
+  }, []);
 
   const toggle = async () => {
     setBusy(true);
@@ -29,11 +38,17 @@ export function App() {
           window.alert(`Could not start capture:\n\n${res.error}`);
         }
       }
-      await refreshRunning();
     } finally {
       setBusy(false);
     }
   };
+
+  if (phase === 'checking') {
+    return <div className="app boot" />;
+  }
+  if (phase === 'guard') {
+    return <PermissionGuard onGranted={() => setPhase('ready')} />;
+  }
 
   return (
     <div className="app">

@@ -48,5 +48,9 @@ export const PermissionStatusSchema = z.object({
 });
 export type PermissionStatus = z.infer<typeof PermissionStatusSchema>;
 
+/** Which TCC grant a request/open-settings call targets. */
+export const PermissionKindSchema = z.enum(['inputMonitoring', 'screenRecording']);
+export type PermissionKind = z.infer<typeof PermissionKindSchema>;
+
 /** Capture on/off state reported to the renderer. */
 export type CaptureState = { running: boolean };

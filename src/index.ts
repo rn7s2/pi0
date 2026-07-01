@@ -1,9 +1,12 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu, screen, shell, Tray } from 'electron';
 import * as native from '@pi0/native';
 
 import { defaultDataDir, loadSettings, saveSettings } from './main/settings';
+import { trayIcon } from './main/trayIcon';
 import { IPC, StartResult } from './shared/ipc';
 import {
+  PermissionKind,
+  PermissionKindSchema,
   PermissionStatus,
   QueryRangeSchema,
   Settings,
@@ -11,9 +14,17 @@ import {
   TextRecordArraySchema,
 } from './shared/schemas';
 
-// Magic constants injected by Forge's Webpack plugin.
+// Magic constants injected by Forge's Webpack plugin (one pair per entry point).
 declare const MAIN_WINDOW_WEBPACK_ENTRY: string;
 declare const MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY: string;
+declare const PANEL_WINDOW_WEBPACK_ENTRY: string;
+declare const PANEL_WINDOW_PRELOAD_WEBPACK_ENTRY: string;
+
+// The System Settings > Privacy pane deep-links for each grant the guard needs.
+const SETTINGS_URL: Record<PermissionKind, string> = {
+  inputMonitoring: 'x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent',
+  screenRecording: 'x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture',
+};
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (require('electron-squirrel-startup')) {
@@ -31,8 +42,14 @@ if (!app.requestSingleInstanceLock()) {
 
 function bootstrap(): void {
   let mainWindow: BrowserWindow | null = null;
+  let panelWindow: BrowserWindow | null = null;
+  let tray: Tray | null = null;
   let settings: Settings | null = null;
   let snapshotTimer: ReturnType<typeof setInterval> | null = null;
+  // Distinguishes an explicit quit from a main-window close (which hides to tray).
+  let isQuitting = false;
+  // Debounce so a tray click that blurs (and hides) the panel doesn't reopen it.
+  let panelHiddenAt = 0;
 
   // ---- capture control ----------------------------------------------------
 
@@ -59,6 +76,17 @@ function bootstrap(): void {
     }
   };
 
+  // Push the current running state to every live renderer (main + panel) so the
+  // topbar and the float-panel switch stay in sync no matter who toggled it.
+  const broadcastRunning = (): void => {
+    const running = native.isRunning();
+    for (const win of [mainWindow, panelWindow]) {
+      if (win && !win.isDestroyed()) {
+        win.webContents.send(IPC.runningChanged, running);
+      }
+    }
+  };
+
   const startCapture = (): StartResult => {
     if (!settings) {
       return { running: false, error: 'settings not loaded' };
@@ -75,6 +103,7 @@ function bootstrap(): void {
         () => void captureNow(),
       );
       restartTimer();
+      broadcastRunning();
       return { running: true };
     } catch (err) {
       return { running: false, error: (err as Error).message };
@@ -88,7 +117,140 @@ function bootstrap(): void {
     } catch (err) {
       console.error('[pi0] stop failed:', (err as Error).message);
     }
+    broadcastRunning();
     return { running: false };
+  };
+
+  // ---- windows ------------------------------------------------------------
+
+  const createMainWindow = (): void => {
+    mainWindow = new BrowserWindow({
+      width: 1000,
+      height: 720,
+      show: false,
+      webPreferences: {
+        preload: MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY,
+      },
+    });
+    mainWindow.loadURL(MAIN_WINDOW_WEBPACK_ENTRY);
+    mainWindow.once('ready-to-show', () => mainWindow?.show());
+    // Closing the main window hides it to the tray; the app keeps recording and
+    // is only really quit from the tray/panel (which flips isQuitting first).
+    mainWindow.on('close', (event) => {
+      if (!isQuitting) {
+        event.preventDefault();
+        mainWindow?.hide();
+      }
+    });
+    mainWindow.on('closed', () => {
+      mainWindow = null;
+    });
+  };
+
+  const showMainWindow = (): void => {
+    if (!mainWindow || mainWindow.isDestroyed()) {
+      createMainWindow();
+      return;
+    }
+    mainWindow.show();
+    mainWindow.focus();
+  };
+
+  const toggleMainWindow = (): void => {
+    if (mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible()) {
+      mainWindow.hide();
+    } else {
+      showMainWindow();
+    }
+  };
+
+  const hidePanel = (): void => {
+    if (panelWindow && !panelWindow.isDestroyed()) {
+      panelWindow.hide();
+      panelHiddenAt = Date.now();
+    }
+  };
+
+  const createPanelWindow = (): void => {
+    panelWindow = new BrowserWindow({
+      width: 248,
+      height: 168,
+      show: false,
+      frame: false,
+      resizable: false,
+      movable: false,
+      transparent: true,
+      alwaysOnTop: true,
+      skipTaskbar: true,
+      fullscreenable: false,
+      hasShadow: true,
+      webPreferences: {
+        preload: PANEL_WINDOW_PRELOAD_WEBPACK_ENTRY,
+      },
+    });
+    panelWindow.loadURL(PANEL_WINDOW_WEBPACK_ENTRY);
+    // Follow the user across Spaces / over fullscreen apps.
+    panelWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    // Dismiss when focus leaves (click elsewhere / Esc handled in renderer).
+    panelWindow.on('blur', hidePanel);
+    panelWindow.on('closed', () => {
+      panelWindow = null;
+    });
+  };
+
+  // Position the panel just below the clicked tray icon, clamped to the display.
+  const showPanelAt = (bounds: Electron.Rectangle): void => {
+    if (!panelWindow || panelWindow.isDestroyed()) {
+      createPanelWindow();
+    }
+    if (!panelWindow) return;
+    const [pw] = panelWindow.getSize();
+    const display = screen.getDisplayNearestPoint({ x: bounds.x, y: bounds.y });
+    const work = display.workArea;
+    const gap = 6;
+    const x = Math.round(
+      Math.max(
+        work.x + gap,
+        Math.min(bounds.x + bounds.width / 2 - pw / 2, work.x + work.width - pw - gap),
+      ),
+    );
+    const y = Math.round(bounds.y + bounds.height + 2);
+    panelWindow.setPosition(x, y, false);
+    broadcastRunning();
+    panelWindow.show();
+    panelWindow.focus();
+  };
+
+  const togglePanel = (bounds: Electron.Rectangle): void => {
+    if (panelWindow && !panelWindow.isDestroyed() && panelWindow.isVisible()) {
+      hidePanel();
+    } else if (Date.now() - panelHiddenAt < 200) {
+      // The click that reached the tray just blurred (and hid) the panel; leave it closed.
+    } else {
+      showPanelAt(bounds);
+    }
+  };
+
+  const createTray = (): void => {
+    tray = new Tray(trayIcon());
+    tray.setToolTip('pi0 — personal intelligence workbench');
+    tray.on('click', (_event, bounds) => togglePanel(bounds));
+    // Right-click safety net so pi0 is always quittable even if the panel fails.
+    tray.on('right-click', () => {
+      tray?.popUpContextMenu(
+        Menu.buildFromTemplate([
+          { label: 'Show pi0', click: () => showMainWindow() },
+          { type: 'separator' },
+          {
+            label: 'Quit pi0',
+            click: () => {
+              isQuitting = true;
+              app.quit();
+            },
+          },
+        ]),
+      );
+    });
   };
 
   // ---- IPC ----------------------------------------------------------------
@@ -120,6 +282,36 @@ function bootstrap(): void {
       return { inputMonitoring: p.inputMonitoring, screenRecording: p.screenRecording };
     });
 
+    ipcMain.handle(IPC.requestPermission, (_event, rawKind): PermissionStatus => {
+      const kind = PermissionKindSchema.parse(rawKind);
+      // Fire the TCC prompt (also registers pi0 in the relevant Settings list).
+      if (kind === 'inputMonitoring') {
+        native.requestInputMonitoring();
+      } else {
+        native.requestScreenRecording();
+      }
+      const p = native.permissionsStatus();
+      return { inputMonitoring: p.inputMonitoring, screenRecording: p.screenRecording };
+    });
+
+    ipcMain.handle(IPC.openPermissionSettings, async (_event, rawKind) => {
+      const kind = PermissionKindSchema.parse(rawKind);
+      await shell.openExternal(SETTINGS_URL[kind]);
+    });
+
+    ipcMain.handle(IPC.toggleMainWindow, () => toggleMainWindow());
+
+    ipcMain.handle(IPC.quitApp, () => {
+      isQuitting = true;
+      app.quit();
+    });
+
+    ipcMain.handle(IPC.relaunchApp, () => {
+      isQuitting = true;
+      app.relaunch();
+      app.exit(0);
+    });
+
     ipcMain.handle(IPC.queryText, async (_event, rawRange): Promise<TextRecord[]> => {
       const range = QueryRangeSchema.parse(rawRange);
       const records = await native.queryText({
@@ -132,48 +324,27 @@ function bootstrap(): void {
     });
   };
 
-  // ---- window / lifecycle -------------------------------------------------
+  // ---- lifecycle ----------------------------------------------------------
 
-  const createWindow = (): void => {
-    mainWindow = new BrowserWindow({
-      width: 1000,
-      height: 720,
-      webPreferences: {
-        preload: MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY,
-      },
-    });
-    mainWindow.loadURL(MAIN_WINDOW_WEBPACK_ENTRY);
-    mainWindow.on('closed', () => {
-      mainWindow = null;
-    });
-  };
-
-  app.on('second-instance', () => {
-    if (mainWindow) {
-      if (mainWindow.isMinimized()) mainWindow.restore();
-      mainWindow.focus();
-    }
-  });
+  app.on('second-instance', () => showMainWindow());
 
   app.on('ready', async () => {
     settings = await loadSettings();
     registerIpc();
-    createWindow();
+    createPanelWindow();
+    createTray();
+    createMainWindow();
   });
 
-  // Recorder without a window has no controls, so quit (and stop) on close.
+  // Recorder lives in the tray: closing every window must NOT quit the app.
   app.on('window-all-closed', () => {
-    stopCapture();
-    app.quit();
+    /* keep running in the background; quit is explicit via tray/panel */
   });
 
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow();
-    }
-  });
+  app.on('activate', () => showMainWindow());
 
   app.on('before-quit', () => {
+    isQuitting = true;
     stopCapture();
   });
 }

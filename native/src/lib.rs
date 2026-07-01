@@ -279,3 +279,20 @@ fn input_monitoring_granted() -> bool {
     use objc2_io_kit::{IOHIDAccessType, IOHIDCheckAccess, IOHIDRequestType};
     IOHIDCheckAccess(IOHIDRequestType::ListenEvent) == IOHIDAccessType::Granted
 }
+
+/// Trigger the macOS Input Monitoring (IOHID ListenEvent) TCC prompt and return
+/// whether access is granted afterwards. The first call registers pi0 in the
+/// Input Monitoring list so the user can grant it; later calls just report status.
+#[napi]
+pub fn request_input_monitoring() -> bool {
+    use objc2_io_kit::{IOHIDRequestAccess, IOHIDRequestType};
+    IOHIDRequestAccess(IOHIDRequestType::ListenEvent)
+}
+
+/// Trigger the macOS Screen Recording TCC prompt and return whether access is
+/// granted. The first call registers pi0 in the Screen Recording list; the grant
+/// itself typically takes effect only after a relaunch.
+#[napi]
+pub fn request_screen_recording() -> bool {
+    objc2_core_graphics::CGRequestScreenCaptureAccess()
+}

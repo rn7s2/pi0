@@ -1,0 +1,126 @@
+/* Tray float panel — its own renderer bundle, so its own stylesheet.
+   The BrowserWindow is transparent; `.fp` paints the rounded, opaque card. */
+:root {
+  --bg: #1c1f26;
+  --panel-2: #262b36;
+  --border: #333a47;
+  --text: #e6e8ec;
+  --muted: #9aa2b1;
+  --accent: #5b8cff;
+  --green: #3ecf8e;
+  --red: #ff6b6b;
+  --hover: #2c3240;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  background: transparent;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  color: var(--text);
+  font-size: 13px;
+  -webkit-user-select: none;
+  user-select: none;
+  cursor: default;
+  overflow: hidden;
+}
+
+.fp {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.fp-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  flex: 1;
+  padding: 0 12px;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+button.fp-row:hover {
+  background: var(--hover);
+}
+.fp-row.danger:hover {
+  background: rgba(255, 107, 107, 0.14);
+}
+.fp-row.danger .fp-icon,
+.fp-row.danger .fp-label {
+  color: var(--red);
+}
+
+.fp-icon {
+  width: 18px;
+  text-align: center;
+  font-size: 14px;
+  flex: none;
+}
+.fp-label {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  font-weight: 500;
+}
+.fp-sub {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--muted);
+}
+.fp-sub.error {
+  color: var(--red);
+}
+.fp-chevron {
+  color: var(--muted);
+  font-size: 18px;
+}
+
+/* toggle switch */
+.switch {
+  position: relative;
+  width: 40px;
+  height: 24px;
+  flex: none;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: var(--panel-2);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.switch.on {
+  background: var(--green);
+}
+.switch:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.switch .knob {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.15s ease;
+}
+.switch.on .knob {
+  transform: translateX(16px);
+}
