@@ -100,7 +100,11 @@ pub struct HidState {
 }
 
 impl HidState {
-    pub fn new(data_dir: PathBuf, shared: Arc<Shared>, notify_hotkey: Box<dyn Fn() + Send>) -> Self {
+    pub fn new(
+        data_dir: PathBuf,
+        shared: Arc<Shared>,
+        notify_hotkey: Box<dyn Fn() + Send>,
+    ) -> Self {
         Self {
             data_dir,
             shared,
@@ -133,7 +137,8 @@ impl HidState {
             match buf.as_ref() {
                 None => true,
                 Some(b) => {
-                    b.app.sanitized != current.sanitized || now_ms - b.started_ms >= FLUSH_INTERVAL_MS
+                    b.app.sanitized != current.sanitized
+                        || now_ms - b.started_ms >= FLUSH_INTERVAL_MS
                 }
             }
         };
@@ -213,4 +218,3 @@ impl HidState {
         }
     }
 }
-

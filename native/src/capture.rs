@@ -76,58 +76,60 @@ fn capture_all_displays_png() -> Result<Vec<(usize, Vec<u8>)>> {
     let tx_content = tx.clone();
 
     // Stage 1: enumerate shareable displays.
-    let content_block = RcBlock::new(move |content: *mut SCShareableContent, _err: *mut NSError| {
-        if content.is_null() {
-            let _ = tx_content.send(Msg::Fail(
-                "no shareable content — grant Screen Recording (System Settings → Privacy \
+    let content_block = RcBlock::new(
+        move |content: *mut SCShareableContent, _err: *mut NSError| {
+            if content.is_null() {
+                let _ = tx_content.send(Msg::Fail(
+                    "no shareable content — grant Screen Recording (System Settings → Privacy \
                  & Security → Screen Recording) and relaunch"
-                    .to_string(),
-            ));
-            return;
-        }
-        let content = unsafe { &*content };
-        let display_array = unsafe { content.displays() };
-        let displays = order_main_first(&display_array);
-        if displays.is_empty() {
-            let _ = tx_content.send(Msg::Fail("no displays available to capture".to_string()));
-            return;
-        }
-        let _ = tx_content.send(Msg::Count(displays.len()));
-
-        // Stage 2: capture each display (main display gets index 0).
-        for (index, display) in displays.into_iter().enumerate() {
-            let empty_windows: Retained<NSArray<SCWindow>> = NSArray::new();
-            let filter = unsafe {
-                SCContentFilter::initWithDisplay_excludingWindows(
-                    SCContentFilter::alloc(),
-                    &display,
-                    &empty_windows,
-                )
-            };
-            let config = unsafe { SCStreamConfiguration::new() };
-            unsafe {
-                config.setWidth(display.width().max(0) as usize);
-                config.setHeight(display.height().max(0) as usize);
+                        .to_string(),
+                ));
+                return;
             }
+            let content = unsafe { &*content };
+            let display_array = unsafe { content.displays() };
+            let displays = order_main_first(&display_array);
+            if displays.is_empty() {
+                let _ = tx_content.send(Msg::Fail("no displays available to capture".to_string()));
+                return;
+            }
+            let _ = tx_content.send(Msg::Count(displays.len()));
 
-            let tx_shot = tx_content.clone();
-            let shot_block = RcBlock::new(move |image: *mut CGImage, _err: *mut NSError| {
-                let result = if image.is_null() {
-                    Err("screenshot returned a null image".to_string())
-                } else {
-                    encode_png(unsafe { &*image }).map_err(|e| format!("{e:#}"))
+            // Stage 2: capture each display (main display gets index 0).
+            for (index, display) in displays.into_iter().enumerate() {
+                let empty_windows: Retained<NSArray<SCWindow>> = NSArray::new();
+                let filter = unsafe {
+                    SCContentFilter::initWithDisplay_excludingWindows(
+                        SCContentFilter::alloc(),
+                        &display,
+                        &empty_windows,
+                    )
                 };
-                let _ = tx_shot.send(Msg::Shot(index, result));
-            });
-            unsafe {
-                SCScreenshotManager::captureImageWithFilter_configuration_completionHandler(
-                    &filter,
-                    &config,
-                    Some(&shot_block),
-                );
+                let config = unsafe { SCStreamConfiguration::new() };
+                unsafe {
+                    config.setWidth(display.width().max(0) as usize);
+                    config.setHeight(display.height().max(0) as usize);
+                }
+
+                let tx_shot = tx_content.clone();
+                let shot_block = RcBlock::new(move |image: *mut CGImage, _err: *mut NSError| {
+                    let result = if image.is_null() {
+                        Err("screenshot returned a null image".to_string())
+                    } else {
+                        encode_png(unsafe { &*image }).map_err(|e| format!("{e:#}"))
+                    };
+                    let _ = tx_shot.send(Msg::Shot(index, result));
+                });
+                unsafe {
+                    SCScreenshotManager::captureImageWithFilter_configuration_completionHandler(
+                        &filter,
+                        &config,
+                        Some(&shot_block),
+                    );
+                }
             }
-        }
-    });
+        },
+    );
 
     unsafe { SCShareableContent::getShareableContentWithCompletionHandler(&content_block) };
 
@@ -154,7 +156,10 @@ fn capture_all_displays_png() -> Result<Vec<(usize, Vec<u8>)>> {
     }
 
     if shots.is_empty() {
-        return Err(anyhow!("all display captures failed: {}", errors.join("; ")));
+        return Err(anyhow!(
+            "all display captures failed: {}",
+            errors.join("; ")
+        ));
     }
     shots.sort_by_key(|(index, _)| *index);
     Ok(shots)
@@ -169,7 +174,13 @@ fn order_main_first(displays: &NSArray<SCDisplay>) -> Vec<Retained<SCDisplay>> {
         all.push(displays.objectAtIndex(i));
     }
     // Stable sort: main display first, others keep enumeration order.
-    all.sort_by_key(|d| if unsafe { d.displayID() } == main { 0u8 } else { 1u8 });
+    all.sort_by_key(|d| {
+        if unsafe { d.displayID() } == main {
+            0u8
+        } else {
+            1u8
+        }
+    });
     all
 }
 

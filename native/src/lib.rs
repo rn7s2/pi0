@@ -20,8 +20,8 @@ use objc2::rc::Retained;
 use objc2::runtime::{NSObjectProtocol, ProtocolObject};
 
 mod app_monitor;
-mod capture;
 mod callbacks;
+mod capture;
 mod engine;
 mod keymap;
 mod paths;

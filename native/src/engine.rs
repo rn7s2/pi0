@@ -77,7 +77,13 @@ pub fn spawn(
     let join = std::thread::Builder::new()
         .name("pi0-hid".to_string())
         .spawn(move || {
-            hid_thread_main(data_dir_thread, shared_thread, notify_hotkey, running_thread, tx)
+            hid_thread_main(
+                data_dir_thread,
+                shared_thread,
+                notify_hotkey,
+                running_thread,
+                tx,
+            )
         })?;
 
     match rx.recv() {
@@ -220,5 +226,8 @@ fn matching_dict(usage_page: u32, usage: u32) -> CFRetained<CFDictionary> {
 
 /// Convert an IOKit `&CStr` key constant into a `CFString`.
 fn cfstring(key: &CStr) -> CFRetained<CFString> {
-    CFString::from_str(key.to_str().expect("IOKit key constant was not valid UTF-8"))
+    CFString::from_str(
+        key.to_str()
+            .expect("IOKit key constant was not valid UTF-8"),
+    )
 }
