@@ -1,0 +1,6 @@
+/target
+/node_modules
+# napi-generated artifacts
+/index.js
+/index.d.ts
+*.node

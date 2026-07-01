@@ -1,8 +1,259 @@
+:root {
+  --bg: #14161a;
+  --panel: #1c1f26;
+  --panel-2: #232733;
+  --border: #2c313d;
+  --text: #e6e8ec;
+  --muted: #9aa2b1;
+  --accent: #5b8cff;
+  --green: #3ecf8e;
+  --red: #ff6b6b;
+}
+
+* {
+  box-sizing: border-box;
+}
+
 body {
-  font-family:
-    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial,
-    sans-serif;
-  margin: auto;
-  max-width: 38rem;
-  padding: 2rem;
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.brand {
+  font-weight: 700;
+  font-size: 16px;
+}
+.tagline {
+  color: var(--muted);
+  font-weight: 400;
+  font-size: 12px;
+  margin-left: 8px;
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.status {
+  font-size: 12px;
+}
+.status.on {
+  color: var(--green);
+}
+.status.off {
+  color: var(--muted);
+}
+
+.tabs {
+  display: flex;
+  gap: 4px;
+  padding: 8px 16px 0;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+}
+.tab {
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  padding: 8px 14px;
+  cursor: pointer;
+  border-radius: 6px 6px 0 0;
+  font-size: 13px;
+}
+.tab.active {
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-bottom-color: var(--bg);
+  margin-bottom: -1px;
+}
+
+.content {
+  flex: 1;
+  overflow: auto;
+  padding: 20px;
+}
+
+.panel {
+  max-width: 760px;
+}
+h2 {
+  margin: 0 0 16px;
+  font-size: 16px;
+}
+h3 {
+  font-size: 13px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin: 24px 0 10px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 16px;
+  max-width: 420px;
+}
+.field.checkbox {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+.field span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+input[type='number'],
+input[type='text'],
+input[type='datetime-local'] {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 13px;
+}
+input[readonly] {
+  color: var(--muted);
+}
+
+.btn {
+  background: var(--accent);
+  border: none;
+  color: white;
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+}
+.btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.btn.small {
+  padding: 5px 12px;
+  font-size: 12px;
+}
+.btn.start {
+  background: var(--green);
+}
+.btn.stop {
+  background: var(--red);
+}
+
+.muted {
+  color: var(--muted);
+}
+.error {
+  color: var(--red);
+}
+
+/* permissions */
+.perms {
+  margin-top: 8px;
+  border-top: 1px solid var(--border);
+  padding-top: 4px;
+}
+.perm-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  flex-wrap: wrap;
+}
+.dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex: none;
+}
+.dot.ok {
+  background: var(--green);
+}
+.dot.bad {
+  background: var(--red);
+}
+.perm-label {
+  min-width: 140px;
+}
+.perm-state {
+  color: var(--muted);
+  font-size: 12px;
+}
+.perm-hint {
+  flex-basis: 100%;
+  color: var(--muted);
+  font-size: 12px;
+  margin-left: 17px;
+}
+
+/* data viewer */
+.range {
+  display: flex;
+  gap: 16px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.range label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.results {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.record {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+.record-meta {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+.record-app {
+  font-weight: 600;
+}
+.record-time {
+  color: var(--muted);
+  font-size: 12px;
+}
+.record-text {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12.5px;
+  color: var(--text);
 }

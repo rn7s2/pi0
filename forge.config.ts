@@ -8,14 +8,25 @@ import { WebpackPlugin } from '@electron-forge/plugin-webpack';
 import { FusesPlugin } from '@electron-forge/plugin-fuses';
 import { FuseV1Options, FuseVersion } from '@electron/fuses';
 
+import { execSync } from 'node:child_process';
+
 import { mainConfig } from './webpack.main.config';
 import { rendererConfig } from './webpack.renderer.config';
 
 const config: ForgeConfig = {
   packagerConfig: {
     asar: true,
+    // pi0 needs macOS 14+ for ScreenCaptureKit (SCScreenshotManager.captureImage).
+    appBundleId: 'com.pi0.app',
   },
   rebuildConfig: {},
+  hooks: {
+    // Build the Rust native addon (@pi0/native) before webpack bundles the main
+    // process, so the generated .node is present for the asset relocator.
+    generateAssets: async () => {
+      execSync('npm run build:native', { stdio: 'inherit' });
+    },
+  },
   makers: [
     new MakerSquirrel({}),
     new MakerZIP({}, ['darwin']),
@@ -31,7 +42,7 @@ const config: ForgeConfig = {
         entryPoints: [
           {
             html: './src/index.html',
-            js: './src/renderer.ts',
+            js: './src/renderer.tsx',
             name: 'main_window',
             preload: {
               js: './src/preload.ts',
