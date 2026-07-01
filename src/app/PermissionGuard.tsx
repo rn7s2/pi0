@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Badge, Button, Card, Modal, Space, Tag, Typography } from '@arco-design/web-react';
 
 import type { PermissionKind, PermissionStatus } from '../shared/schemas';
 
@@ -40,80 +41,85 @@ export function PermissionGuard({ onGranted }: { onGranted: () => void }) {
     };
 
     const row = (kind: PermissionKind, label: string, why: string, granted: boolean) => (
-        <div className="guard-perm">
-            <span className={`dot ${granted ? 'ok' : 'bad'}`} />
-            <div className="guard-perm-body">
-                <div className="guard-perm-head">
-                    <span className="guard-perm-label">{label}</span>
-                    <span className={`guard-perm-state ${granted ? 'ok' : ''}`}>
-                        {granted ? 'Granted ✓' : 'Required'}
-                    </span>
-                </div>
-                <p className="guard-perm-why">{why}</p>
-                {!granted && (
-                    <div className="guard-perm-actions">
-                        <button
-                            className="btn small"
-                            disabled={busy === kind}
-                            onClick={() => void request(kind)}
-                        >
-                            {busy === kind ? 'Requesting…' : 'Grant access'}
-                        </button>
-                        <button
-                            className="btn small ghost"
-                            onClick={() => void window.pi0.openPermissionSettings(kind)}
-                        >
-                            Open System Settings
-                        </button>
-                    </div>
-                )}
+        <Card size="small" className="guard-perm" key={kind}>
+            <div className="guard-perm-head">
+                <Space size="small">
+                    <Badge status={granted ? 'success' : 'error'} />
+                    <Typography.Text bold>{label}</Typography.Text>
+                </Space>
+                <Tag color={granted ? 'green' : 'red'} size="small">
+                    {granted ? 'Granted' : 'Required'}
+                </Tag>
             </div>
-        </div>
+            <Typography.Text type="secondary" className="guard-perm-why">
+                {why}
+            </Typography.Text>
+            {!granted && (
+                <Space size="small" style={{ marginTop: 12 }}>
+                    <Button
+                        type="primary"
+                        size="small"
+                        loading={busy === kind}
+                        onClick={() => void request(kind)}
+                    >
+                        Grant access
+                    </Button>
+                    <Button
+                        size="small"
+                        onClick={() => void window.pi0.openPermissionSettings(kind)}
+                    >
+                        Open System Settings
+                    </Button>
+                </Space>
+            )}
+        </Card>
     );
 
     return (
-        <div className="guard-backdrop">
-            <div className="guard-modal" role="dialog" aria-modal="true">
-                <h1 className="guard-title">Welcome to pi0</h1>
-                <p className="guard-sub">
-                    pi0 records your keystrokes and screen to build your personal workbench. Grant
-                    both macOS permissions to continue.
-                </p>
-
-                {perms ? (
-                    <div className="guard-perms">
-                        {row(
-                            'inputMonitoring',
-                            'Input Monitoring',
-                            'Lets pi0 log keystrokes so it can organise the text you type.',
-                            perms.inputMonitoring,
-                        )}
-                        {row(
-                            'screenRecording',
-                            'Screen Recording',
-                            'Lets pi0 take periodic screenshots. Enabling this may require a relaunch.',
-                            perms.screenRecording,
-                        )}
-                    </div>
-                ) : (
-                    <p className="muted">Checking permissions…</p>
-                )}
-
+        <Modal
+            visible
+            title="Welcome to pi0"
+            closable={false}
+            maskClosable={false}
+            escToExit={false}
+            style={{ width: 540 }}
+            footer={
                 <div className="guard-footer">
                     {perms && !perms.screenRecording && (
-                        <button
-                            className="btn small ghost"
-                            onClick={() => void window.pi0.relaunchApp()}
-                        >
+                        <Button size="small" onClick={() => void window.pi0.relaunchApp()}>
                             Relaunch pi0
-                        </button>
+                        </Button>
                     )}
                     <span className="guard-footer-spacer" />
-                    <button className="btn small ghost" onClick={() => void window.pi0.quitApp()}>
+                    <Button size="small" status="danger" onClick={() => void window.pi0.quitApp()}>
                         Quit
-                    </button>
+                    </Button>
                 </div>
-            </div>
-        </div>
+            }
+        >
+            <Typography.Paragraph type="secondary" style={{ marginTop: 0 }}>
+                pi0 records your keystrokes and screen to build your personal workbench. Grant both
+                macOS permissions to continue.
+            </Typography.Paragraph>
+
+            {perms ? (
+                <Space direction="vertical" size="medium" style={{ width: '100%' }}>
+                    {row(
+                        'inputMonitoring',
+                        'Input Monitoring',
+                        'Lets pi0 log keystrokes so it can organise the text you type.',
+                        perms.inputMonitoring,
+                    )}
+                    {row(
+                        'screenRecording',
+                        'Screen Recording',
+                        'Lets pi0 take periodic screenshots. Enabling this may require a relaunch.',
+                        perms.screenRecording,
+                    )}
+                </Space>
+            ) : (
+                <Typography.Text type="secondary">Checking permissions…</Typography.Text>
+            )}
+        </Modal>
     );
 }

@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { Badge, Button, Space, Typography } from '@arco-design/web-react';
+import { IconRefresh } from '@arco-design/web-react/icon';
 
 import type { PermissionStatus } from '../shared/schemas';
 
@@ -14,19 +16,23 @@ export function PermissionsPanel() {
     }, []);
 
     const row = (label: string, ok: boolean, hint: string) => (
-        <div className="perm-row">
-            <span className={`dot ${ok ? 'ok' : 'bad'}`} />
-            <span className="perm-label">{label}</span>
-            <span className="perm-state">{ok ? 'granted' : 'not granted'}</span>
-            {!ok && <span className="perm-hint">{hint}</span>}
+        <div className="perm-row" key={label}>
+            <Badge status={ok ? 'success' : 'error'} />
+            <Typography.Text className="perm-label">{label}</Typography.Text>
+            <Typography.Text type="secondary">{ok ? 'granted' : 'not granted'}</Typography.Text>
+            {!ok && (
+                <Typography.Text type="secondary" className="perm-hint">
+                    {hint}
+                </Typography.Text>
+            )}
         </div>
     );
 
     return (
         <div className="perms">
-            <h3>macOS permissions</h3>
+            <Typography.Title heading={6}>macOS permissions</Typography.Title>
             {perms ? (
-                <>
+                <Space direction="vertical" size={6} style={{ width: '100%' }}>
                     {row(
                         'Input Monitoring',
                         perms.inputMonitoring,
@@ -37,13 +43,13 @@ export function PermissionsPanel() {
                         perms.screenRecording,
                         'System Settings → Privacy & Security → Screen Recording → enable pi0, then relaunch',
                     )}
-                </>
+                </Space>
             ) : (
-                <p className="muted">Checking…</p>
+                <Typography.Text type="secondary">Checking…</Typography.Text>
             )}
-            <button className="btn small" onClick={check}>
+            <Button size="small" icon={<IconRefresh />} onClick={check} style={{ marginTop: 12 }}>
                 Recheck
-            </button>
+            </Button>
         </div>
     );
 }

@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
+import { IconDesktop, IconPoweroff, IconRight } from '@arco-design/web-react/icon';
 
 /**
  * Tray float panel. Three rows, per the milestone:
  *  1. toggle the main window's visibility
- *  2. a switch that turns recording on/off
+ *  2. toggle recording on/off (the whole row is the hit target; the switch on
+ *     the right is a visual indicator, not a separate control)
  *  3. quit the whole application
  */
 export function FloatPanel() {
@@ -37,31 +39,40 @@ export function FloatPanel() {
     return (
         <div className="fp">
             <button className="fp-row" onClick={() => void window.pi0.toggleMainWindow()}>
-                <span className="fp-icon">🖥️</span>
+                <span className="fp-icon">
+                    <IconDesktop />
+                </span>
                 <span className="fp-label">Open pi0 window</span>
-                <span className="fp-chevron">›</span>
+                <IconRight className="fp-chevron" />
             </button>
 
-            <div className="fp-row">
-                <span className="fp-icon">{running ? '🔴' : '⚪️'}</span>
+            <button
+                className="fp-row"
+                aria-pressed={running}
+                disabled={busy}
+                onClick={() => void toggleRecording()}
+            >
+                <span className="fp-icon">
+                    <span className={`fp-dot ${running ? 'on' : ''}`} />
+                </span>
                 <span className="fp-label">
                     Recording
                     {error && <span className="fp-sub error">{error}</span>}
                 </span>
-                <button
-                    type="button"
-                    role="switch"
-                    aria-checked={running}
-                    className={`switch ${running ? 'on' : ''}`}
-                    disabled={busy}
-                    onClick={() => void toggleRecording()}
+                <span
+                    className={`fp-switch ${running ? 'on' : ''} ${busy ? 'busy' : ''}`}
+                    aria-hidden="true"
                 >
-                    <span className="knob" />
-                </button>
-            </div>
+                    <span className="fp-knob" />
+                </span>
+            </button>
+
+            <div className="fp-divider" />
 
             <button className="fp-row danger" onClick={() => void window.pi0.quitApp()}>
-                <span className="fp-icon">⏻</span>
+                <span className="fp-icon">
+                    <IconPoweroff />
+                </span>
                 <span className="fp-label">Quit pi0</span>
             </button>
         </div>

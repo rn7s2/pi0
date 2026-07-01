@@ -1,14 +1,6 @@
-:root {
-    --bg: #14161a;
-    --panel: #1c1f26;
-    --panel-2: #232733;
-    --border: #2c313d;
-    --text: #e6e8ec;
-    --muted: #9aa2b1;
-    --accent: #5b8cff;
-    --green: #3ecf8e;
-    --red: #ff6b6b;
-}
+/* pi0 main window. Arco Design supplies component styling; this sheet only
+   handles the page skeleton and the few custom bits (record cards, permission
+   rows). Colours come from Arco's CSS variables so they track the dark theme. */
 
 * {
     box-sizing: border-box;
@@ -16,16 +8,13 @@
 
 body {
     margin: 0;
-    font-family:
-        -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-    background: var(--bg);
-    color: var(--text);
     font-size: 14px;
+    background: var(--color-bg-1);
+    color: var(--color-text-1);
 }
 
+/* ---- shell ---- */
 .app {
-    display: flex;
-    flex-direction: column;
     height: 100vh;
 }
 
@@ -33,59 +22,30 @@ body {
     display: flex;
     align-items: center;
     justify-content: space-between;
+    height: auto;
+    line-height: normal;
     padding: 12px 20px;
-    border-bottom: 1px solid var(--border);
-    background: var(--panel);
+    background: var(--color-bg-2);
+    border-bottom: 1px solid var(--color-border-2);
 }
 
 .brand {
-    font-weight: 700;
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+}
+.brand-name {
     font-size: 16px;
+    font-weight: 700;
 }
 .tagline {
-    color: var(--muted);
-    font-weight: 400;
     font-size: 12px;
-    margin-left: 8px;
 }
 
 .controls {
     display: flex;
     align-items: center;
-    gap: 12px;
-}
-.status {
-    font-size: 12px;
-}
-.status.on {
-    color: var(--green);
-}
-.status.off {
-    color: var(--muted);
-}
-
-.tabs {
-    display: flex;
-    gap: 4px;
-    padding: 8px 16px 0;
-    border-bottom: 1px solid var(--border);
-    background: var(--panel);
-}
-.tab {
-    background: transparent;
-    border: none;
-    color: var(--muted);
-    padding: 8px 14px;
-    cursor: pointer;
-    border-radius: 6px 6px 0 0;
-    font-size: 13px;
-}
-.tab.active {
-    color: var(--text);
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-bottom-color: var(--bg);
-    margin-bottom: -1px;
+    gap: 14px;
 }
 
 .content {
@@ -95,160 +55,28 @@ body {
 }
 
 .panel {
-    max-width: 760px;
-}
-h2 {
-    margin: 0 0 16px;
-    font-size: 16px;
-}
-h3 {
-    font-size: 13px;
-    color: var(--muted);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    margin: 24px 0 10px;
+    max-width: 800px;
 }
 
-.field {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    margin-bottom: 16px;
-    max-width: 420px;
-}
-.field.checkbox {
-    flex-direction: row;
-    align-items: center;
-    gap: 8px;
-}
-.field span {
-    color: var(--muted);
-    font-size: 12px;
-}
-
-input[type='number'],
-input[type='text'],
-input[type='datetime-local'] {
-    background: var(--panel-2);
-    border: 1px solid var(--border);
-    color: var(--text);
-    border-radius: 6px;
-    padding: 8px 10px;
-    font-size: 13px;
-}
-input[readonly] {
-    color: var(--muted);
-}
-
-.btn {
-    background: var(--accent);
-    border: none;
-    color: white;
-    padding: 8px 16px;
-    border-radius: 6px;
-    cursor: pointer;
-    font-size: 13px;
-    font-weight: 600;
-}
-.btn:disabled {
-    opacity: 0.5;
-    cursor: default;
-}
-.btn.small {
-    padding: 5px 12px;
-    font-size: 12px;
-}
-.btn.start {
-    background: var(--green);
-}
-.btn.stop {
-    background: var(--red);
-}
-
-.muted {
-    color: var(--muted);
-}
-.error {
-    color: var(--red);
-}
-
-/* permissions */
-.perms {
-    margin-top: 8px;
-    border-top: 1px solid var(--border);
-    padding-top: 4px;
-}
-.perm-row {
+/* blank boot screen while probing permissions */
+.app.boot {
+    height: 100vh;
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 6px 0;
-    flex-wrap: wrap;
-}
-.dot {
-    width: 9px;
-    height: 9px;
-    border-radius: 50%;
-    flex: none;
-}
-.dot.ok {
-    background: var(--green);
-}
-.dot.bad {
-    background: var(--red);
-}
-.perm-label {
-    min-width: 140px;
-}
-.perm-state {
-    color: var(--muted);
-    font-size: 12px;
-}
-.perm-hint {
-    flex-basis: 100%;
-    color: var(--muted);
-    font-size: 12px;
-    margin-left: 17px;
+    justify-content: center;
+    background: var(--color-bg-1);
 }
 
-/* data viewer */
-.range {
-    display: flex;
-    gap: 16px;
-    align-items: flex-end;
-    flex-wrap: wrap;
-    margin-bottom: 16px;
-}
-.range label {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    color: var(--muted);
-    font-size: 12px;
-}
-
-.results {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-}
-.record {
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 10px 12px;
-}
+/* ---- data viewer records ---- */
 .record-meta {
     display: flex;
+    align-items: center;
     justify-content: space-between;
-    margin-bottom: 6px;
-}
-.record-app {
-    font-weight: 600;
+    gap: 12px;
 }
 .record-time {
-    color: var(--muted);
     font-size: 12px;
+    white-space: nowrap;
 }
 .record-text {
     margin: 0;
@@ -256,108 +84,46 @@ input[readonly] {
     word-break: break-word;
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
     font-size: 12.5px;
-    color: var(--text);
+    line-height: 1.5;
+    color: var(--color-text-1);
 }
 
-/* blank boot screen while probing permissions */
-.app.boot {
-    background: var(--bg);
+/* ---- permissions panel ---- */
+.perms {
+    margin-top: 4px;
 }
-
-.btn.ghost {
-    background: transparent;
-    border: 1px solid var(--border);
-    color: var(--text);
-    font-weight: 500;
-}
-.btn.ghost:hover {
-    background: var(--panel-2);
-}
-
-/* permission guard modal */
-.guard-backdrop {
-    position: fixed;
-    inset: 0;
+.perm-row {
     display: flex;
     align-items: center;
-    justify-content: center;
-    background: rgba(10, 11, 14, 0.7);
-    backdrop-filter: blur(4px);
-    padding: 24px;
+    gap: 10px;
+    flex-wrap: wrap;
 }
-.guard-modal {
-    width: 100%;
-    max-width: 520px;
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    padding: 28px 28px 20px;
-    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+.perm-label {
+    min-width: 150px;
 }
-.guard-title {
-    margin: 0 0 6px;
-    font-size: 20px;
+.perm-hint {
+    flex-basis: 100%;
+    margin-left: 18px;
+    font-size: 12px;
 }
-.guard-sub {
-    margin: 0 0 22px;
-    color: var(--muted);
-    line-height: 1.5;
-}
-.guard-perms {
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
-}
-.guard-perm {
-    display: flex;
-    gap: 12px;
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 14px;
-}
-.guard-perm .dot {
-    margin-top: 5px;
-}
-.guard-perm-body {
-    flex: 1;
-}
+
+/* ---- permission guard modal ---- */
 .guard-perm-head {
     display: flex;
-    align-items: baseline;
+    align-items: center;
     justify-content: space-between;
     gap: 12px;
-}
-.guard-perm-label {
-    font-weight: 600;
-    font-size: 14px;
-}
-.guard-perm-state {
-    font-size: 12px;
-    color: var(--red);
-}
-.guard-perm-state.ok {
-    color: var(--green);
+    margin-bottom: 6px;
 }
 .guard-perm-why {
-    margin: 4px 0 0;
-    color: var(--muted);
+    display: block;
     font-size: 12.5px;
     line-height: 1.45;
-}
-.guard-perm-actions {
-    display: flex;
-    gap: 8px;
-    margin-top: 12px;
-    flex-wrap: wrap;
 }
 .guard-footer {
     display: flex;
     align-items: center;
-    gap: 8px;
-    margin-top: 22px;
-    padding-top: 16px;
-    border-top: 1px solid var(--border);
+    width: 100%;
 }
 .guard-footer-spacer {
     flex: 1;

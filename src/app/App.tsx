@@ -1,17 +1,19 @@
 import { useEffect, useState } from 'react';
+import { Badge, Button, Layout, Message, Spin, Tabs, Typography } from '@arco-design/web-react';
+import { IconPause, IconPlayArrow } from '@arco-design/web-react/icon';
 
 import { DataViewer } from './DataViewer';
 import { PermissionGuard } from './PermissionGuard';
 import { SettingsView } from './SettingsView';
 
-type Tab = 'data' | 'settings';
 // 'checking' → probing perms; 'guard' → blocking modal; 'ready' → app usable.
 type Phase = 'checking' | 'guard' | 'ready';
+
+const { Header, Content } = Layout;
 
 export function App() {
     const [running, setRunning] = useState(false);
     const [busy, setBusy] = useState(false);
-    const [tab, setTab] = useState<Tab>('data');
     const [phase, setPhase] = useState<Phase>('checking');
 
     // Boot gate: skip the modal entirely when both grants are already in place.
@@ -35,7 +37,10 @@ export function App() {
             } else {
                 const res = await window.pi0.startCapture();
                 if (!res.running && res.error) {
-                    window.alert(`Could not start capture:\n\n${res.error}`);
+                    Message.error({
+                        content: `Could not start capture: ${res.error}`,
+                        duration: 5000,
+                    });
                 }
             }
         } finally {
@@ -44,48 +49,52 @@ export function App() {
     };
 
     if (phase === 'checking') {
-        return <div className="app boot" />;
+        return (
+            <div className="app boot">
+                <Spin size={32} tip="Starting pi0…" />
+            </div>
+        );
     }
     if (phase === 'guard') {
         return <PermissionGuard onGranted={() => setPhase('ready')} />;
     }
 
     return (
-        <div className="app">
-            <header className="topbar">
+        <Layout className="app">
+            <Header className="topbar">
                 <div className="brand">
-                    pi0 <span className="tagline">personal intelligence workbench</span>
+                    <Typography.Text className="brand-name">pi0</Typography.Text>
+                    <Typography.Text type="secondary" className="tagline">
+                        personal intelligence workbench
+                    </Typography.Text>
                 </div>
                 <div className="controls">
-                    <span className={`status ${running ? 'on' : 'off'}`}>
-                        {running ? '● recording' : '○ idle'}
-                    </span>
-                    <button
+                    <Badge
+                        status={running ? 'processing' : 'default'}
+                        text={running ? 'Recording' : 'Idle'}
+                    />
+                    <Button
+                        type="primary"
+                        status={running ? 'danger' : 'success'}
+                        loading={busy}
+                        icon={running ? <IconPause /> : <IconPlayArrow />}
                         onClick={toggle}
-                        disabled={busy}
-                        className={`btn ${running ? 'stop' : 'start'}`}
                     >
-                        {running ? 'Stop' : 'Start'} capture
-                    </button>
+                        {running ? 'Stop capture' : 'Start capture'}
+                    </Button>
                 </div>
-            </header>
+            </Header>
 
-            <nav className="tabs">
-                <button
-                    className={tab === 'data' ? 'tab active' : 'tab'}
-                    onClick={() => setTab('data')}
-                >
-                    Data
-                </button>
-                <button
-                    className={tab === 'settings' ? 'tab active' : 'tab'}
-                    onClick={() => setTab('settings')}
-                >
-                    Settings
-                </button>
-            </nav>
-
-            <main className="content">{tab === 'data' ? <DataViewer /> : <SettingsView />}</main>
-        </div>
+            <Content className="content">
+                <Tabs defaultActiveTab="data" className="main-tabs">
+                    <Tabs.TabPane key="data" title="Data">
+                        <DataViewer />
+                    </Tabs.TabPane>
+                    <Tabs.TabPane key="settings" title="Settings">
+                        <SettingsView />
+                    </Tabs.TabPane>
+                </Tabs>
+            </Content>
+        </Layout>
     );
 }

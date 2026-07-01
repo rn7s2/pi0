@@ -1,16 +1,8 @@
 /* Tray float panel — its own renderer bundle, so its own stylesheet.
-   The BrowserWindow is transparent; `.fp` paints the rounded, opaque card. */
-:root {
-    --bg: #1c1f26;
-    --panel-2: #262b36;
-    --border: #333a47;
-    --text: #e6e8ec;
-    --muted: #9aa2b1;
-    --accent: #5b8cff;
-    --green: #3ecf8e;
-    --red: #ff6b6b;
-    --hover: #2c3240;
-}
+   The BrowserWindow is transparent; `.fp` paints the rounded, opaque card.
+   Arco Design styles the Switch; this sheet owns the panel chrome.
+   Row heights are fixed and the window (see index.ts) is sized to match, so
+   the menu stays compact instead of stretching to fill the window. */
 
 * {
     box-sizing: border-box;
@@ -20,9 +12,7 @@ html,
 body {
     margin: 0;
     background: transparent;
-    font-family:
-        -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-    color: var(--text);
+    color: var(--color-text-1);
     font-size: 13px;
     -webkit-user-select: none;
     user-select: none;
@@ -34,10 +24,9 @@ body {
     height: 100vh;
     display: flex;
     flex-direction: column;
-    gap: 2px;
     padding: 6px;
-    background: var(--bg);
-    border: 1px solid var(--border);
+    background: var(--color-bg-3);
+    border: 1px solid var(--color-border-2);
     border-radius: 12px;
 }
 
@@ -46,82 +35,123 @@ body {
     align-items: center;
     gap: 10px;
     width: 100%;
-    flex: 1;
-    padding: 0 12px;
+    height: 38px;
+    flex: none;
+    padding: 0 10px;
     background: transparent;
     border: none;
     border-radius: 8px;
-    color: var(--text);
+    color: var(--color-text-1);
     font-size: 13px;
     text-align: left;
     cursor: pointer;
+    transition: background 0.12s ease;
 }
 button.fp-row:hover {
-    background: var(--hover);
+    background: var(--color-fill-2);
 }
-.fp-row.danger:hover {
-    background: rgba(255, 107, 107, 0.14);
+button.fp-row:active {
+    background: var(--color-fill-3);
+}
+button.fp-row:disabled {
+    cursor: default;
+}
+button.fp-row:disabled:hover {
+    background: transparent;
 }
 .fp-row.danger .fp-icon,
 .fp-row.danger .fp-label {
-    color: var(--red);
+    color: rgb(var(--red-6));
+}
+button.fp-row.danger:hover {
+    background: rgba(245, 63, 63, 0.14);
 }
 
 .fp-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
     width: 18px;
-    text-align: center;
-    font-size: 14px;
+    font-size: 16px;
+    color: var(--color-text-2);
     flex: none;
 }
+
 .fp-label {
     flex: 1;
     display: flex;
     flex-direction: column;
+    justify-content: center;
+    gap: 1px;
     font-weight: 500;
+    line-height: 1.2;
 }
 .fp-sub {
     font-size: 11px;
     font-weight: 400;
-    color: var(--muted);
+    color: var(--color-text-3);
 }
 .fp-sub.error {
-    color: var(--red);
-}
-.fp-chevron {
-    color: var(--muted);
-    font-size: 18px;
+    color: rgb(var(--red-6));
 }
 
-/* toggle switch */
-.switch {
-    position: relative;
-    width: 40px;
-    height: 24px;
+.fp-chevron {
+    color: var(--color-text-3);
+    font-size: 14px;
     flex: none;
-    padding: 0;
-    border: none;
-    border-radius: 999px;
-    background: var(--panel-2);
-    cursor: pointer;
-    transition: background 0.15s ease;
 }
-.switch.on {
-    background: var(--green);
+
+/* recording status dot in the icon slot */
+.fp-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--color-text-4);
+    transition:
+        background 0.15s ease,
+        box-shadow 0.15s ease;
 }
-.switch:disabled {
-    opacity: 0.6;
-    cursor: default;
+.fp-dot.on {
+    background: rgb(var(--green-6));
+    box-shadow: 0 0 0 3px rgba(var(--green-6), 0.18);
 }
-.switch .knob {
-    position: absolute;
-    top: 3px;
-    left: 3px;
-    width: 18px;
+
+/* visual-only toggle (the whole row is the real control) */
+.fp-switch {
+    position: relative;
+    width: 32px;
     height: 18px;
+    flex: none;
+    border-radius: 999px;
+    background: var(--color-fill-4);
+    transition:
+        background 0.15s ease,
+        opacity 0.15s ease;
+}
+.fp-switch.on {
+    background: rgb(var(--green-6));
+}
+.fp-switch.busy {
+    opacity: 0.6;
+}
+.fp-knob {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 14px;
+    height: 14px;
     border-radius: 50%;
     background: #fff;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
     transition: transform 0.15s ease;
 }
-.switch.on .knob {
-    transform: translateX(16px);
+.fp-switch.on .fp-knob {
+    transform: translateX(14px);
+}
+
+.fp-divider {
+    height: 1px;
+    margin: 6px 10px;
+    background: var(--color-border-2);
+    flex: none;
 }

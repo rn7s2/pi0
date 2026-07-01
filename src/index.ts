@@ -174,8 +174,8 @@ function bootstrap(): void {
 
     const createPanelWindow = (): void => {
         panelWindow = new BrowserWindow({
-            width: 248,
-            height: 168,
+            width: 256,
+            height: 142,
             show: false,
             frame: false,
             resizable: false,

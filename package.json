@@ -50,8 +50,10 @@
     },
     "dependencies": {
         "@ai-sdk/openai": "^4.0.4",
+        "@arco-design/web-react": "^2.66.15",
         "@pi0/native": "file:native",
         "ai": "^7.0.9",
+        "dayjs": "^1.11.21",
         "electron-squirrel-startup": "^1.0.1",
         "react": "^19.2.7",
         "react-dom": "^19.2.7",
