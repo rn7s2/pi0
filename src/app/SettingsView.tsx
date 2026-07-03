@@ -25,11 +25,13 @@ interface SettingsForm {
 export function SettingsView() {
     const [form] = Form.useForm<SettingsForm>();
     const [settings, setSettings] = useState<Settings | null>(null);
+    const [useScreenshots, setUseScreenshots] = useState(true);
     const [saving, setSaving] = useState(false);
 
     useEffect(() => {
         void window.pi0.getSettings().then((s) => {
             setSettings(s);
+            setUseScreenshots(s.useScreenshots);
             form.setFieldsValue({
                 intervalSec: Math.round(s.intervalMs / 1000),
                 captureOnHotkey: s.captureOnHotkey,
@@ -43,6 +45,7 @@ export function SettingsView() {
         setSaving(true);
         try {
             const next = await window.pi0.saveSettings({
+                useScreenshots,
                 intervalMs: Math.min(
                     3_600_000,
                     Math.max(1000, Math.round(values.intervalSec) * 1000),
@@ -51,6 +54,7 @@ export function SettingsView() {
                 captureOnHotkey: values.captureOnHotkey,
             });
             setSettings(next);
+            setUseScreenshots(next.useScreenshots);
             Message.success('Settings saved');
         } finally {
             setSaving(false);
@@ -77,6 +81,13 @@ export function SettingsView() {
                 }}
             >
                 <FormItem
+                    label="Use screenshots"
+                    extra="When off, pi0 keeps logging keystrokes but takes no screenshots — this stops the periodic screen capture that can use CPU."
+                >
+                    <Switch checked={useScreenshots} onChange={setUseScreenshots} />
+                </FormItem>
+
+                <FormItem
                     label="Screenshot interval"
                     field="intervalSec"
                     rules={[{ required: true, type: 'number', min: 1, max: 3600 }]}
@@ -87,6 +98,7 @@ export function SettingsView() {
                         step={1}
                         suffix="seconds"
                         style={{ width: 200 }}
+                        disabled={!useScreenshots}
                     />
                 </FormItem>
 
@@ -96,7 +108,7 @@ export function SettingsView() {
                     triggerPropName="checked"
                     extra={`Triggers a screenshot when you press ${settings.hotkey.join(' + ')}`}
                 >
-                    <Switch />
+                    <Switch disabled={!useScreenshots} />
                 </FormItem>
 
                 <FormItem label="Data folder">

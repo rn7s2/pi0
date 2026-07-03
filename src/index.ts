@@ -72,10 +72,15 @@ function bootstrap(): void {
 
     const restartTimer = (): void => {
         clearTimer();
-        if (settings && native.isRunning()) {
+        if (settings && settings.useScreenshots && native.isRunning()) {
             snapshotTimer = setInterval(() => void captureNow(), settings.intervalMs);
         }
     };
+
+    // The hotkey only exists to trigger a screenshot, so the master screenshot
+    // switch gates it too: with screenshots off, the hotkey does nothing.
+    const effectiveCaptureOnHotkey = (s: Settings): boolean =>
+        s.useScreenshots && s.captureOnHotkey;
 
     // Push the current running state to every live renderer (main + panel) so the
     // topbar and the float-panel switch stay in sync no matter who toggled it.
@@ -98,7 +103,7 @@ function bootstrap(): void {
                     dataDir: settings.dataDir,
                     intervalMs: settings.intervalMs,
                     hotkey: settings.hotkey,
-                    captureOnHotkey: settings.captureOnHotkey,
+                    captureOnHotkey: effectiveCaptureOnHotkey(settings),
                 },
                 // Hotkey fires this on the JS main thread (via the addon's TSFN).
                 () => void captureNow(),
@@ -267,7 +272,7 @@ function bootstrap(): void {
             });
             settings = next;
             if (native.isRunning()) {
-                native.updateSettings(next.intervalMs, next.hotkey, next.captureOnHotkey);
+                native.updateSettings(next.intervalMs, next.hotkey, effectiveCaptureOnHotkey(next));
                 restartTimer();
             }
             return next;

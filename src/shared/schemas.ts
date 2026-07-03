@@ -10,6 +10,12 @@ export const DEFAULT_HOTKEY = ['LC', 'LS', 'S'];
 export const SettingsSchema = z.object({
     /** Absolute directory where recorded data is written. */
     dataDir: z.string().min(1),
+    /**
+     * Master switch for screenshots. When off, pi0 keeps logging keystrokes but
+     * takes no screenshots at all — neither the periodic timer nor the hotkey —
+     * so the expensive ScreenCaptureKit capture path never runs.
+     */
+    useScreenshots: z.boolean().default(true),
     /** Screenshot interval in milliseconds (1s – 1h). */
     intervalMs: z.number().int().min(1000).max(3_600_000).default(60_000),
     /** Screenshot hotkey as keymap tokens, e.g. ["LC","LS","S"]. */
