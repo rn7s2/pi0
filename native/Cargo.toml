@@ -35,6 +35,7 @@ block2 = "0.6"
 # PNG encoding for screenshots.
 image = { version = "0.25", default-features = false, features = ["png"] }
 dispatch2 = "0.3"
+ocr-rs = "2.3"
 
 [build-dependencies]
 napi-build = "2"

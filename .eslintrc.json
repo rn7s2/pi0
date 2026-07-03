@@ -13,5 +13,15 @@
         "plugin:import/typescript",
         "prettier"
     ],
-    "parser": "@typescript-eslint/parser"
+    "parser": "@typescript-eslint/parser",
+    "rules": {
+        "import/no-unresolved": [
+            "error",
+            {
+                // Resolved via the package's `exports` map, which the eslint
+                // node resolver doesn't understand (tsc + webpack both do).
+                "ignore": ["^@modelcontextprotocol/sdk/"]
+            }
+        ]
+    }
 }

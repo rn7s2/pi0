@@ -7,7 +7,7 @@
 //! the `Send` cells in [`state::Shared`] do.
 
 use std::cell::RefCell;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
 
 use napi::bindgen_prelude::{AsyncTask, Error, Result};
@@ -22,8 +22,10 @@ use objc2::runtime::{NSObjectProtocol, ProtocolObject};
 mod app_monitor;
 mod callbacks;
 mod capture;
+mod context_store;
 mod engine;
 mod keymap;
+mod ocr;
 mod paths;
 mod state;
 mod writer;
@@ -136,9 +138,12 @@ pub fn start(config: EngineConfig, on_hotkey: JsFunction) -> Result<()> {
         tsfn.call((), ThreadsafeFunctionCallMode::NonBlocking);
     });
 
-    match engine::spawn(data_dir, Arc::clone(&shared), notify) {
+    match engine::spawn(data_dir.clone(), Arc::clone(&shared), notify) {
         Ok(handle) => {
             *engine_slot().lock().unwrap() = Some(handle);
+            // Contextualise any screenshots a previous run left behind (crash,
+            // hard quit): every picture on disk is pending OCR by definition.
+            ocr::enqueue_sweep(&data_dir);
             Ok(())
         }
         Err(err) => {
@@ -207,8 +212,25 @@ impl Task for CaptureTask {
     type JsValue = Vec<String>;
 
     fn compute(&mut self) -> Result<Self::Output> {
-        capture::capture_to_file(&self.data_dir, &self.app)
-            .map_err(|e| Error::from_reason(format!("{e:#}")))
+        let shots = capture::capture_to_file(&self.data_dir, &self.app)
+            .map_err(|e| Error::from_reason(format!("{e:#}")))?;
+        // Hand every written PNG to the OCR worker, which contextualises it
+        // into `contexts.jsonl` and deletes the picture afterwards.
+        let written = shots
+            .iter()
+            .map(|s| s.path.to_string_lossy().into_owned())
+            .collect();
+        for shot in shots {
+            ocr::enqueue_shot(ocr::PendingShot {
+                data_dir: self.data_dir.clone(),
+                png_path: shot.path,
+                ts: shot.ts,
+                app: self.app.sanitized.clone(),
+                app_raw: self.app.raw.clone(),
+                display: shot.display,
+            });
+        }
+        Ok(written)
     }
 
     fn resolve(&mut self, _env: Env, output: Self::Output) -> Result<Self::JsValue> {
@@ -258,6 +280,173 @@ impl Task for QueryTask {
 #[napi]
 pub fn query_text(params: QueryParams) -> AsyncTask<QueryTask> {
     AsyncTask::new(QueryTask {
+        data_dir: PathBuf::from(params.data_dir),
+        start_ms: params.start_ms as i64,
+        end_ms: params.end_ms as i64,
+    })
+}
+
+// ---- OCR context queries (powers the MCP server) ---------------------------
+
+/// One OCR'd text line; coordinates are normalised to `[0, 1]` relative to the
+/// captured display (x/y = top-left of the box, w/h = its size).
+#[napi(object)]
+pub struct OcrItem {
+    pub text: String,
+    /// Recognition confidence in `[0, 1]`.
+    pub score: f64,
+    pub x: f64,
+    pub y: f64,
+    pub w: f64,
+    pub h: f64,
+}
+
+/// One screenshot's OCR context (maps to zod `ContextRecordSchema`).
+#[napi(object)]
+pub struct ContextRecord {
+    /// Epoch milliseconds the screenshot was taken.
+    pub ts: f64,
+    pub app: String,
+    pub app_raw: String,
+    /// Display index the shot came from (0 = main display).
+    pub display: u32,
+    pub items: Vec<OcrItem>,
+}
+
+impl From<context_store::ContextRecord> for ContextRecord {
+    fn from(r: context_store::ContextRecord) -> Self {
+        Self {
+            ts: r.ts as f64,
+            app: r.app,
+            app_raw: r.app_raw,
+            display: r.display,
+            items: r
+                .items
+                .into_iter()
+                .map(|i| OcrItem {
+                    text: i.text,
+                    score: i.score,
+                    x: i.x,
+                    y: i.y,
+                    w: i.w,
+                    h: i.h,
+                })
+                .collect(),
+        }
+    }
+}
+
+/// Parameters for a paginated context query.
+#[napi(object)]
+pub struct ContextQueryParams {
+    /// Absolute data directory to scan.
+    pub data_dir: String,
+    pub start_ms: f64,
+    pub end_ms: f64,
+    /// Optional app filter (matches sanitized or raw name, case-insensitive).
+    pub app: Option<String>,
+    /// Records to skip (pagination).
+    pub offset: u32,
+    /// Max records to return.
+    pub limit: u32,
+}
+
+/// One page of context records plus the range's total match count.
+#[napi(object)]
+pub struct ContextPage {
+    pub total: u32,
+    pub records: Vec<ContextRecord>,
+}
+
+/// Async filesystem scan of `contexts.jsonl` files. Runs on a libuv worker.
+pub struct ContextsQueryTask {
+    params: ContextQueryParams,
+}
+
+impl Task for ContextsQueryTask {
+    type Output = context_store::ContextPage;
+    type JsValue = ContextPage;
+
+    fn compute(&mut self) -> Result<Self::Output> {
+        context_store::query_contexts(
+            Path::new(&self.params.data_dir),
+            self.params.start_ms as i64,
+            self.params.end_ms as i64,
+            self.params.app.as_deref(),
+            self.params.offset as usize,
+            self.params.limit as usize,
+        )
+        .map_err(|e| Error::from_reason(format!("{e:#}")))
+    }
+
+    fn resolve(&mut self, _env: Env, output: Self::Output) -> Result<Self::JsValue> {
+        Ok(ContextPage {
+            total: output.total,
+            records: output
+                .records
+                .into_iter()
+                .map(ContextRecord::from)
+                .collect(),
+        })
+    }
+}
+
+/// Query OCR contexts within `[startMs, endMs]`, optionally filtered by app,
+/// returning the `[offset, offset + limit)` page plus the total match count.
+#[napi]
+pub fn query_contexts(params: ContextQueryParams) -> AsyncTask<ContextsQueryTask> {
+    AsyncTask::new(ContextsQueryTask { params })
+}
+
+/// Per-app usage aggregate over a time range (maps to zod `AppUsageSchema`).
+#[napi(object)]
+pub struct AppUsage {
+    pub app: String,
+    pub app_raw: String,
+    pub first_ts: f64,
+    pub last_ts: f64,
+    /// Number of keystroke records in the range.
+    pub text_records: u32,
+    /// Number of OCR'd screenshot contexts in the range.
+    pub context_records: u32,
+}
+
+/// Async aggregation of per-app usage across both stores. Runs on a libuv worker.
+pub struct AppsQueryTask {
+    data_dir: PathBuf,
+    start_ms: i64,
+    end_ms: i64,
+}
+
+impl Task for AppsQueryTask {
+    type Output = Vec<context_store::AppUsage>;
+    type JsValue = Vec<AppUsage>;
+
+    fn compute(&mut self) -> Result<Self::Output> {
+        context_store::query_apps(&self.data_dir, self.start_ms, self.end_ms)
+            .map_err(|e| Error::from_reason(format!("{e:#}")))
+    }
+
+    fn resolve(&mut self, _env: Env, output: Self::Output) -> Result<Self::JsValue> {
+        Ok(output
+            .into_iter()
+            .map(|u| AppUsage {
+                app: u.app,
+                app_raw: u.app_raw,
+                first_ts: u.first_ts as f64,
+                last_ts: u.last_ts as f64,
+                text_records: u.text_records,
+                context_records: u.context_records,
+            })
+            .collect())
+    }
+}
+
+/// Aggregate which apps were used within `[startMs, endMs]` (keystroke records
+/// + OCR contexts), most recently active first.
+#[napi]
+pub fn query_apps(params: QueryParams) -> AsyncTask<AppsQueryTask> {
+    AsyncTask::new(AppsQueryTask {
         data_dir: PathBuf::from(params.data_dir),
         start_ms: params.start_ms as i64,
         end_ms: params.end_ms as i64,

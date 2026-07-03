@@ -4,6 +4,28 @@ let's design a personal intelligence workbench. I call this pi0 for now. It coul
 
 do make the plan clean, short and easy to understand.
 
+## milestone 3, 20260703-1
+
+### functionality requirements
+
+- main window should be purely a settings window, remove unnecessary widgets like status indicator and headline
+- screenshots is now mandatory, cannot be switched off
+- must be able to act as a mcp server, so other agents could use our processed information, and user can ad-hoc query and do analysis
+- mcp server should contains interfaces: `['/apps', '/app-guidance', '/contexts']` to fetch contexts
+- mcp server description must include designed usage to let agent know how to use these capabilities
+- this mcp server design made it easy to iterate and provide updates to help agents have better analysis
+
+### technical requirements
+
+- ocr related stuff must be implemented in Rust side
+- use <https://crates.io/crates/ocr-rs> and PP-OCRv6_small_rec.mnn to contextualise screenshots and delete picture afterwards
+- ocr use CPU only. embed the required model files into our app bundle
+- ocr must have texts their corrdinates on screen information (normalised to [0, 1] pair), cause it will be helpful for agent to judge the functionality and purpose of text proses
+- mcp server must be implemented in nodejs process, to encourage faster dev-cycle and enhance dev-experience
+- `/apps` must have timerange, designed to be called by agent first, to know what apps are used in timerange
+- `/app-guidane` will provide the agent how to analyse the contexts, like it will tell the agent `Feishu/Lark` is a IM app and agent should focus on recent messages, contacts name, thus forming useful working context. It also tells agent what to ignore so extra abuntant texts could be ignored by agents
+- `/contexts` must have pagination params, to let agent know it could read by parts
+
 ## milestone 2, 20260701-2
 
 ### functionality requirements

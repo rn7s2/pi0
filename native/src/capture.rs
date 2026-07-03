@@ -27,11 +27,21 @@ use crate::state::AppName;
 /// How long to wait for the async screenshot chain before giving up.
 const CAPTURE_TIMEOUT: Duration = Duration::from_secs(10);
 
+/// One written screenshot file plus the metadata the OCR pipeline needs to
+/// contextualise (and then delete) it.
+pub struct WrittenShot {
+    pub path: std::path::PathBuf,
+    /// Display index (0 = main display).
+    pub display: u32,
+    /// Epoch ms of the capture (shared across a multi-display set).
+    pub ts: i64,
+}
+
 /// Capture **all attached displays** and write a PNG per display under
 /// `<data_dir>/<date>/<app>/shots/`, all sharing one `<ts>` so the set is
 /// grouped: `<ts>.png` for a single display, or `<ts>-m<i>.png` (main first)
-/// when there are several. Returns the absolute paths written.
-pub fn capture_to_file(data_dir: &Path, app: &AppName) -> Result<Vec<String>> {
+/// when there are several. Returns the written files with their metadata.
+pub fn capture_to_file(data_dir: &Path, app: &AppName) -> Result<Vec<WrittenShot>> {
     let shots = capture_all_displays_png()?;
     let ts = paths::now_ms();
     let date = paths::local_date_for_ms(ts);
@@ -48,7 +58,11 @@ pub fn capture_to_file(data_dir: &Path, app: &AppName) -> Result<Vec<String>> {
         };
         let path = dir.join(name);
         std::fs::write(&path, png)?;
-        written.push(path.to_string_lossy().into_owned());
+        written.push(WrittenShot {
+            path,
+            display: *index as u32,
+            ts,
+        });
     }
     Ok(written)
 }

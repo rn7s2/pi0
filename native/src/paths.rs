@@ -43,6 +43,11 @@ pub fn shots_dir(data_dir: &Path, date: &str, app_sanitized: &str) -> PathBuf {
     app_dir(data_dir, date, app_sanitized).join("shots")
 }
 
+/// The OCR context file for a given day + app.
+pub fn contexts_file(data_dir: &Path, date: &str, app_sanitized: &str) -> PathBuf {
+    app_dir(data_dir, date, app_sanitized).join("contexts.jsonl")
+}
+
 /// The inclusive set of local dates spanned by `[start_ms, end_ms]`, as
 /// `YYYY-MM-DD` strings. Used to pick which `<date>` folders a query scans.
 pub fn dates_in_range(start_ms: i64, end_ms: i64) -> Vec<String> {

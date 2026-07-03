@@ -1,5 +1,5 @@
-/* pi0 main window. Arco Design supplies component styling; this sheet only
-   handles the page skeleton and the few custom bits (record cards, permission
+/* pi0 main (settings) window. Arco Design supplies component styling; this
+   sheet only handles the page skeleton and the few custom bits (permission
    rows). Colours come from Arco's CSS variables so they track the dark theme. */
 
 * {
@@ -18,38 +18,7 @@ body {
     height: 100vh;
 }
 
-.topbar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    height: auto;
-    line-height: normal;
-    padding: 12px 20px;
-    background: var(--color-bg-2);
-    border-bottom: 1px solid var(--color-border-2);
-}
-
-.brand {
-    display: flex;
-    align-items: baseline;
-    gap: 8px;
-}
-.brand-name {
-    font-size: 16px;
-    font-weight: 700;
-}
-.tagline {
-    font-size: 12px;
-}
-
-.controls {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-}
-
 .content {
-    flex: 1;
     overflow: auto;
     padding: 20px;
 }
@@ -65,27 +34,6 @@ body {
     align-items: center;
     justify-content: center;
     background: var(--color-bg-1);
-}
-
-/* ---- data viewer records ---- */
-.record-meta {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-}
-.record-time {
-    font-size: 12px;
-    white-space: nowrap;
-}
-.record-text {
-    margin: 0;
-    white-space: pre-wrap;
-    word-break: break-word;
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 12.5px;
-    line-height: 1.5;
-    color: var(--color-text-1);
 }
 
 /* ---- permissions panel ---- */

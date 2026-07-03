@@ -51,6 +51,7 @@
     "dependencies": {
         "@ai-sdk/openai": "^4.0.4",
         "@arco-design/web-react": "^2.66.15",
+        "@modelcontextprotocol/sdk": "^1.29.0",
         "@pi0/native": "file:native",
         "ai": "^7.0.9",
         "dayjs": "^1.11.21",

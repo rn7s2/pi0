@@ -20,21 +20,21 @@ const FormItem = Form.Item;
 interface SettingsForm {
     intervalSec: number;
     captureOnHotkey: boolean;
+    mcpPort: number;
 }
 
 export function SettingsView() {
     const [form] = Form.useForm<SettingsForm>();
     const [settings, setSettings] = useState<Settings | null>(null);
-    const [useScreenshots, setUseScreenshots] = useState(true);
     const [saving, setSaving] = useState(false);
 
     useEffect(() => {
         void window.pi0.getSettings().then((s) => {
             setSettings(s);
-            setUseScreenshots(s.useScreenshots);
             form.setFieldsValue({
                 intervalSec: Math.round(s.intervalMs / 1000),
                 captureOnHotkey: s.captureOnHotkey,
+                mcpPort: s.mcpPort,
             });
         });
     }, [form]);
@@ -45,16 +45,15 @@ export function SettingsView() {
         setSaving(true);
         try {
             const next = await window.pi0.saveSettings({
-                useScreenshots,
                 intervalMs: Math.min(
                     3_600_000,
                     Math.max(1000, Math.round(values.intervalSec) * 1000),
                 ),
                 hotkey: settings.hotkey,
                 captureOnHotkey: values.captureOnHotkey,
+                mcpPort: values.mcpPort,
             });
             setSettings(next);
-            setUseScreenshots(next.useScreenshots);
             Message.success('Settings saved');
         } finally {
             setSaving(false);
@@ -78,19 +77,14 @@ export function SettingsView() {
                 initialValues={{
                     intervalSec: Math.round(settings.intervalMs / 1000),
                     captureOnHotkey: settings.captureOnHotkey,
+                    mcpPort: settings.mcpPort,
                 }}
             >
-                <FormItem
-                    label="Use screenshots"
-                    extra="When off, pi0 keeps logging keystrokes but takes no screenshots — this stops the periodic screen capture that can use CPU."
-                >
-                    <Switch checked={useScreenshots} onChange={setUseScreenshots} />
-                </FormItem>
-
                 <FormItem
                     label="Screenshot interval"
                     field="intervalSec"
                     rules={[{ required: true, type: 'number', min: 1, max: 3600 }]}
+                    extra="Screenshots are OCR'd into text on-device and the image is deleted right after — only the recognized text is kept."
                 >
                     <InputNumber
                         min={1}
@@ -98,7 +92,6 @@ export function SettingsView() {
                         step={1}
                         suffix="seconds"
                         style={{ width: 200 }}
-                        disabled={!useScreenshots}
                     />
                 </FormItem>
 
@@ -108,11 +101,24 @@ export function SettingsView() {
                     triggerPropName="checked"
                     extra={`Triggers a screenshot when you press ${settings.hotkey.join(' + ')}`}
                 >
-                    <Switch disabled={!useScreenshots} />
+                    <Switch />
                 </FormItem>
 
                 <FormItem label="Data folder">
                     <Input readOnly value={settings.dataDir} />
+                </FormItem>
+
+                <Divider />
+
+                <Typography.Title heading={5}>MCP server</Typography.Title>
+
+                <FormItem
+                    label="Port"
+                    field="mcpPort"
+                    rules={[{ required: true, type: 'number', min: 1024, max: 65535 }]}
+                    extra={`Agents connect via Streamable HTTP at http://127.0.0.1:${settings.mcpPort}/mcp`}
+                >
+                    <InputNumber min={1024} max={65535} step={1} style={{ width: 200 }} />
                 </FormItem>
 
                 <FormItem>

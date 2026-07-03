@@ -6,22 +6,25 @@ import { z } from 'zod';
 /** Default hotkey combo (Ctrl+Shift+S) as keymap tokens the addon understands. */
 export const DEFAULT_HOTKEY = ['LC', 'LS', 'S'];
 
+/** Default localhost port the MCP server listens on. */
+export const DEFAULT_MCP_PORT = 31415;
+
 /** User settings, persisted to `<userData>/settings.json`. */
 export const SettingsSchema = z.object({
     /** Absolute directory where recorded data is written. */
     dataDir: z.string().min(1),
     /**
-     * Master switch for screenshots. When off, pi0 keeps logging keystrokes but
-     * takes no screenshots at all — neither the periodic timer nor the hotkey —
-     * so the expensive ScreenCaptureKit capture path never runs.
+     * Screenshot interval in milliseconds (1s – 1h). Screenshots are mandatory
+     * in M3 — they feed the on-device OCR that produces the context store — so
+     * there is no master switch anymore, only the cadence.
      */
-    useScreenshots: z.boolean().default(true),
-    /** Screenshot interval in milliseconds (1s – 1h). */
     intervalMs: z.number().int().min(1000).max(3_600_000).default(60_000),
     /** Screenshot hotkey as keymap tokens, e.g. ["LC","LS","S"]. */
     hotkey: z.array(z.string()).min(1).default(DEFAULT_HOTKEY),
     /** Whether the hotkey triggers a screenshot. */
     captureOnHotkey: z.boolean().default(true),
+    /** Localhost port the MCP server (Streamable HTTP) listens on. */
+    mcpPort: z.number().int().min(1024).max(65535).default(DEFAULT_MCP_PORT),
 });
 export type Settings = z.infer<typeof SettingsSchema>;
 
@@ -35,6 +38,55 @@ export const TextRecordSchema = z.object({
 export type TextRecord = z.infer<typeof TextRecordSchema>;
 
 export const TextRecordArraySchema = z.array(TextRecordSchema);
+
+/**
+ * One OCR'd text line from a screenshot. Coordinates are normalised to the
+ * [0, 1] range relative to the captured display — (x, y) is the top-left of
+ * the line's bounding box, (w, h) its size — so agents can reason about where
+ * on screen a text sat (title bar vs sidebar vs content) at any resolution.
+ */
+export const OcrItemSchema = z.object({
+    text: z.string(),
+    /** Recognition confidence in [0, 1]. */
+    score: z.number(),
+    x: z.number(),
+    y: z.number(),
+    w: z.number(),
+    h: z.number(),
+});
+export type OcrItem = z.infer<typeof OcrItemSchema>;
+
+/** One screenshot's OCR context (mirrors the Rust `ContextRecord`). */
+export const ContextRecordSchema = z.object({
+    /** Epoch milliseconds the screenshot was taken. */
+    ts: z.number(),
+    /** Sanitized app name (folder-safe). */
+    app: z.string(),
+    /** Original localizedName of the frontmost app. */
+    appRaw: z.string(),
+    /** Display index the shot came from (0 = main display). */
+    display: z.number(),
+    items: z.array(OcrItemSchema),
+});
+export type ContextRecord = z.infer<typeof ContextRecordSchema>;
+
+export const ContextRecordArraySchema = z.array(ContextRecordSchema);
+
+/** Per-app usage aggregate for a time range (mirrors the Rust `AppUsage`). */
+export const AppUsageSchema = z.object({
+    app: z.string(),
+    appRaw: z.string(),
+    /** Epoch ms of the first/last record seen in the range. */
+    firstTs: z.number(),
+    lastTs: z.number(),
+    /** Number of keystroke records in the range. */
+    textRecords: z.number(),
+    /** Number of OCR'd screenshot contexts in the range. */
+    contextRecords: z.number(),
+});
+export type AppUsage = z.infer<typeof AppUsageSchema>;
+
+export const AppUsageArraySchema = z.array(AppUsageSchema);
 
 /** A time-range query from the renderer (dataDir is injected by main). */
 export const QueryRangeSchema = z

@@ -1,5 +1,5 @@
 // IPC contract shared by main, preload, and renderer.
-import type { PermissionKind, PermissionStatus, QueryRange, Settings, TextRecord } from './schemas';
+import type { PermissionKind, PermissionStatus, Settings } from './schemas';
 
 /** IPC channel names (namespaced to avoid collisions). */
 export const IPC = {
@@ -8,11 +8,9 @@ export const IPC = {
     startCapture: 'pi0:startCapture',
     stopCapture: 'pi0:stopCapture',
     isRunning: 'pi0:isRunning',
-    queryText: 'pi0:queryText',
     permissionsStatus: 'pi0:permissionsStatus',
     requestPermission: 'pi0:requestPermission',
     openPermissionSettings: 'pi0:openPermissionSettings',
-    captureNow: 'pi0:captureNow',
     toggleMainWindow: 'pi0:toggleMainWindow',
     quitApp: 'pi0:quitApp',
     relaunchApp: 'pi0:relaunchApp',
@@ -30,13 +28,11 @@ export interface Pi0Api {
     startCapture(): Promise<StartResult>;
     stopCapture(): Promise<{ running: boolean }>;
     isRunning(): Promise<boolean>;
-    queryText(range: QueryRange): Promise<TextRecord[]>;
     permissionsStatus(): Promise<PermissionStatus>;
     /** Trigger the macOS TCC prompt for a grant; resolves to the fresh status. */
     requestPermission(kind: PermissionKind): Promise<PermissionStatus>;
     /** Open the relevant System Settings > Privacy pane for a grant. */
     openPermissionSettings(kind: PermissionKind): Promise<void>;
-    captureNow(): Promise<string[]>;
     /** Show the main window if hidden, hide it if visible. */
     toggleMainWindow(): Promise<void>;
     /** Quit the whole application (stops capture first). */

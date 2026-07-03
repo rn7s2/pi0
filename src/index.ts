@@ -1,18 +1,11 @@
 import { app, BrowserWindow, ipcMain, Menu, screen, shell, Tray } from 'electron';
 import * as native from '@pi0/native';
 
+import { McpHandle, startMcpServer } from './main/mcp/server';
 import { defaultDataDir, loadSettings, saveSettings } from './main/settings';
 import { trayIcon } from './main/trayIcon';
 import { IPC, StartResult } from './shared/ipc';
-import {
-    PermissionKind,
-    PermissionKindSchema,
-    PermissionStatus,
-    QueryRangeSchema,
-    Settings,
-    TextRecord,
-    TextRecordArraySchema,
-} from './shared/schemas';
+import { PermissionKind, PermissionKindSchema, PermissionStatus, Settings } from './shared/schemas';
 
 // Magic constants injected by Forge's Webpack plugin (one pair per entry point).
 declare const MAIN_WINDOW_WEBPACK_ENTRY: string;
@@ -46,6 +39,7 @@ function bootstrap(): void {
     let panelWindow: BrowserWindow | null = null;
     let tray: Tray | null = null;
     let settings: Settings | null = null;
+    let mcp: McpHandle | null = null;
     let snapshotTimer: ReturnType<typeof setInterval> | null = null;
     // Distinguishes an explicit quit from a main-window close (which hides to tray).
     let isQuitting = false;
@@ -70,17 +64,14 @@ function bootstrap(): void {
         }
     };
 
+    // Screenshots are mandatory (they feed the OCR context store): the timer
+    // always runs while capture is on.
     const restartTimer = (): void => {
         clearTimer();
-        if (settings && settings.useScreenshots && native.isRunning()) {
+        if (settings && native.isRunning()) {
             snapshotTimer = setInterval(() => void captureNow(), settings.intervalMs);
         }
     };
-
-    // The hotkey only exists to trigger a screenshot, so the master screenshot
-    // switch gates it too: with screenshots off, the hotkey does nothing.
-    const effectiveCaptureOnHotkey = (s: Settings): boolean =>
-        s.useScreenshots && s.captureOnHotkey;
 
     // Push the current running state to every live renderer (main + panel) so the
     // topbar and the float-panel switch stay in sync no matter who toggled it.
@@ -103,7 +94,7 @@ function bootstrap(): void {
                     dataDir: settings.dataDir,
                     intervalMs: settings.intervalMs,
                     hotkey: settings.hotkey,
-                    captureOnHotkey: effectiveCaptureOnHotkey(settings),
+                    captureOnHotkey: settings.captureOnHotkey,
                 },
                 // Hotkey fires this on the JS main thread (via the addon's TSFN).
                 () => void captureNow(),
@@ -114,6 +105,29 @@ function bootstrap(): void {
         } catch (err) {
             return { running: false, error: (err as Error).message };
         }
+    };
+
+    // ---- MCP server ----------------------------------------------------------
+
+    // A failed bind (e.g. port in use) must not take the recorder down: log it,
+    // keep running, and let the user pick another port in settings.
+    const startMcp = async (): Promise<void> => {
+        if (!settings) return;
+        try {
+            mcp = await startMcpServer(settings.mcpPort, {
+                getDataDir: () => settings?.dataDir ?? defaultDataDir(),
+            });
+            console.log(`[pi0] MCP server at http://127.0.0.1:${mcp.port}/mcp`);
+        } catch (err) {
+            mcp = null;
+            console.error('[pi0] MCP server failed to start:', (err as Error).message);
+        }
+    };
+
+    const restartMcp = async (): Promise<void> => {
+        await mcp?.close();
+        mcp = null;
+        await startMcp();
     };
 
     const stopCapture = (): { running: boolean } => {
@@ -130,9 +144,10 @@ function bootstrap(): void {
     // ---- windows ------------------------------------------------------------
 
     const createMainWindow = (): void => {
+        // Purely a settings window (M3) — compact, form-sized.
         mainWindow = new BrowserWindow({
-            width: 1000,
-            height: 720,
+            width: 620,
+            height: 760,
             show: false,
             webPreferences: {
                 preload: MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY,
@@ -266,14 +281,18 @@ function bootstrap(): void {
 
         ipcMain.handle(IPC.saveSettings, async (_event, raw) => {
             // Renderer is untrusted; keep dataDir under our control and validate.
+            const previousPort = settings?.mcpPort;
             const next = await saveSettings({
                 ...(raw as Record<string, unknown>),
                 dataDir: settings?.dataDir ?? defaultDataDir(),
             });
             settings = next;
             if (native.isRunning()) {
-                native.updateSettings(next.intervalMs, next.hotkey, effectiveCaptureOnHotkey(next));
+                native.updateSettings(next.intervalMs, next.hotkey, next.captureOnHotkey);
                 restartTimer();
+            }
+            if (next.mcpPort !== previousPort) {
+                await restartMcp();
             }
             return next;
         });
@@ -281,7 +300,6 @@ function bootstrap(): void {
         ipcMain.handle(IPC.startCapture, () => startCapture());
         ipcMain.handle(IPC.stopCapture, () => stopCapture());
         ipcMain.handle(IPC.isRunning, () => native.isRunning());
-        ipcMain.handle(IPC.captureNow, () => captureNow());
 
         ipcMain.handle(IPC.permissionsStatus, (): PermissionStatus => {
             const p = native.permissionsStatus();
@@ -317,17 +335,6 @@ function bootstrap(): void {
             app.relaunch();
             app.exit(0);
         });
-
-        ipcMain.handle(IPC.queryText, async (_event, rawRange): Promise<TextRecord[]> => {
-            const range = QueryRangeSchema.parse(rawRange);
-            const records = await native.queryText({
-                dataDir: settings?.dataDir ?? defaultDataDir(),
-                startMs: range.startMs,
-                endMs: range.endMs,
-            });
-            // Validate what the addon returned (catches on-disk drift).
-            return TextRecordArraySchema.parse(records);
-        });
     };
 
     // ---- lifecycle ----------------------------------------------------------
@@ -340,6 +347,7 @@ function bootstrap(): void {
         createPanelWindow();
         createTray();
         createMainWindow();
+        await startMcp();
     });
 
     // Recorder lives in the tray: closing every window must NOT quit the app.
@@ -352,5 +360,7 @@ function bootstrap(): void {
     app.on('before-quit', () => {
         isQuitting = true;
         stopCapture();
+        void mcp?.close();
+        mcp = null;
     });
 }
