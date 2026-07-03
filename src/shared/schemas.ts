@@ -18,7 +18,7 @@ export const SettingsSchema = z.object({
      * in M3 — they feed the on-device OCR that produces the context store — so
      * there is no master switch anymore, only the cadence.
      */
-    intervalMs: z.number().int().min(1000).max(3_600_000).default(60_000),
+    intervalMs: z.number().int().min(1000).max(3_600_000).default(8_000),
     /** Screenshot hotkey as keymap tokens, e.g. ["LC","LS","S"]. */
     hotkey: z.array(z.string()).min(1).default(DEFAULT_HOTKEY),
     /** Whether the hotkey triggers a screenshot. */

@@ -17,6 +17,7 @@ const api: Pi0Api = {
     toggleMainWindow: () => ipcRenderer.invoke(IPC.toggleMainWindow),
     quitApp: () => ipcRenderer.invoke(IPC.quitApp),
     relaunchApp: () => ipcRenderer.invoke(IPC.relaunchApp),
+    resizePanel: (height) => ipcRenderer.send(IPC.panelResize, height),
     onRunningChanged: (cb) => {
         const listener = (_event: unknown, running: boolean) => cb(running);
         ipcRenderer.on(IPC.runningChanged, listener);

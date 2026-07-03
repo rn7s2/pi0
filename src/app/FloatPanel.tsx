@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { IconDesktop, IconPoweroff, IconRight } from '@arco-design/web-react/icon';
 
 /**
@@ -12,11 +12,24 @@ export function FloatPanel() {
     const [running, setRunning] = useState(false);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const cardRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         void window.pi0.isRunning().then(setRunning);
         // Stay in sync when recording is toggled from the main window.
         return window.pi0.onRunningChanged(setRunning);
+    }, []);
+
+    // Size the window to the card's real height so the panel hugs its content
+    // (no blank space below the last row, whatever the row count/heights are).
+    useEffect(() => {
+        const card = cardRef.current;
+        if (!card) return;
+        const report = () => window.pi0.resizePanel(card.offsetHeight);
+        report();
+        const observer = new ResizeObserver(report);
+        observer.observe(card);
+        return () => observer.disconnect();
     }, []);
 
     const toggleRecording = useCallback(async () => {
@@ -37,7 +50,7 @@ export function FloatPanel() {
     }, [running]);
 
     return (
-        <div className="fp">
+        <div className="fp" ref={cardRef}>
             <button className="fp-row" onClick={() => void window.pi0.toggleMainWindow()}>
                 <span className="fp-icon">
                     <IconDesktop />

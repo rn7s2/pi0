@@ -335,6 +335,16 @@ function bootstrap(): void {
             app.relaunch();
             app.exit(0);
         });
+
+        // The panel renderer reports its measured content height so the window
+        // hugs the menu exactly — no hardcoded height to drift out of sync.
+        ipcMain.on(IPC.panelResize, (_event, rawHeight) => {
+            if (!panelWindow || panelWindow.isDestroyed()) return;
+            const height = Math.round(rawHeight);
+            if (!Number.isFinite(height) || height <= 0) return;
+            const [width] = panelWindow.getContentSize();
+            panelWindow.setContentSize(width, height);
+        });
     };
 
     // ---- lifecycle ----------------------------------------------------------

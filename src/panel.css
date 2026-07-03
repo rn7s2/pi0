@@ -21,7 +21,8 @@ body {
 }
 
 .fp {
-    height: 100vh;
+    /* Height comes from the rows; the window is resized to match (see
+       FloatPanel + index.ts), so the card hugs its content with no blank space. */
     display: flex;
     flex-direction: column;
     padding: 6px;

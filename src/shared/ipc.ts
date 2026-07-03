@@ -14,6 +14,8 @@ export const IPC = {
     toggleMainWindow: 'pi0:toggleMainWindow',
     quitApp: 'pi0:quitApp',
     relaunchApp: 'pi0:relaunchApp',
+    /** Renderer → main: the tray panel's measured content height changed. */
+    panelResize: 'pi0:panelResize',
     /** Main → renderer broadcast: capture running state changed. */
     runningChanged: 'pi0:runningChanged',
 } as const;
@@ -39,6 +41,11 @@ export interface Pi0Api {
     quitApp(): Promise<void>;
     /** Relaunch the application (used after granting screen recording). */
     relaunchApp(): Promise<void>;
+    /**
+     * Ask the main process to resize the tray panel window to fit its content
+     * (height in CSS px). Keeps the window flush with the menu, no blank space.
+     */
+    resizePanel(height: number): void;
     /**
      * Subscribe to capture running-state changes broadcast by the main process.
      * Returns an unsubscribe function.
