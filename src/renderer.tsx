@@ -1,5 +1,6 @@
 import { createRoot } from 'react-dom/client';
 
+import './arco-compat';
 import '@arco-design/web-react/dist/css/arco.css';
 import { App } from './app/App';
 import './index.css';

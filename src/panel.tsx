@@ -1,5 +1,6 @@
 import { createRoot } from 'react-dom/client';
 
+import './arco-compat';
 import '@arco-design/web-react/dist/css/arco.css';
 import { FloatPanel } from './app/FloatPanel';
 import './panel.css';
