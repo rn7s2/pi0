@@ -1,16 +1,15 @@
 //! Engine state, split by thread ownership:
 //!
 //! - [`Shared`] is `Send + Sync` and crosses threads: the main-thread
-//!   `NSWorkspace` observer and `update_settings` write it; the HID thread reads
-//!   it. Access is lock-light (`ArcSwap` / atomics / a small `Mutex`).
+//!   `NSWorkspace` observer writes it; the HID thread reads it. Access is
+//!   lock-light (an `ArcSwap` for the frontmost-app cell).
 //! - [`HidState`] lives only on the dedicated HID thread. It owns the keystroke
 //!   buffer and caps-lock latch with single-threaded interior mutability
 //!   (`RefCell`/`Cell`), exactly like the standalone reference.
 
 use std::cell::{Cell, RefCell};
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use arc_swap::ArcSwap;
 
@@ -39,16 +38,12 @@ impl Default for AppName {
 /// Cross-thread state. Written by the main thread, read by the HID thread.
 pub struct Shared {
     app_name: ArcSwap<AppName>,
-    hotkey: Mutex<Vec<u32>>,
-    capture_on_hotkey: AtomicBool,
 }
 
 impl Shared {
-    pub fn new(hotkey: Vec<u32>, capture_on_hotkey: bool) -> Arc<Self> {
+    pub fn new() -> Arc<Self> {
         Arc::new(Self {
             app_name: ArcSwap::from_pointee(AppName::default()),
-            hotkey: Mutex::new(hotkey),
-            capture_on_hotkey: AtomicBool::new(capture_on_hotkey),
         })
     }
 
@@ -58,22 +53,6 @@ impl Shared {
 
     pub fn set_app(&self, name: AppName) {
         self.app_name.store(Arc::new(name));
-    }
-
-    pub fn set_hotkey(&self, codes: Vec<u32>) {
-        *self.hotkey.lock().unwrap() = codes;
-    }
-
-    pub fn hotkey(&self) -> Vec<u32> {
-        self.hotkey.lock().unwrap().clone()
-    }
-
-    pub fn set_capture_on_hotkey(&self, on: bool) {
-        self.capture_on_hotkey.store(on, Ordering::SeqCst);
-    }
-
-    pub fn capture_on_hotkey(&self) -> bool {
-        self.capture_on_hotkey.load(Ordering::SeqCst)
     }
 }
 
@@ -91,28 +70,15 @@ pub struct HidState {
     shared: Arc<Shared>,
     buffer: RefCell<Option<Buffer>>,
     capslock: Cell<bool>,
-    /// Currently-held scancodes, for hotkey-combo detection.
-    pressed: RefCell<Vec<u32>>,
-    /// Edge latch so a satisfied combo fires once until released.
-    hotkey_armed: Cell<bool>,
-    /// Invokes the JS hotkey callback (a napi ThreadsafeFunction under the hood).
-    notify_hotkey: Box<dyn Fn() + Send>,
 }
 
 impl HidState {
-    pub fn new(
-        data_dir: PathBuf,
-        shared: Arc<Shared>,
-        notify_hotkey: Box<dyn Fn() + Send>,
-    ) -> Self {
+    pub fn new(data_dir: PathBuf, shared: Arc<Shared>) -> Self {
         Self {
             data_dir,
             shared,
             buffer: RefCell::new(None),
             capslock: Cell::new(false),
-            pressed: RefCell::new(Vec::new()),
-            hotkey_armed: Cell::new(false),
-            notify_hotkey,
         }
     }
 
@@ -180,41 +146,6 @@ impl HidState {
         };
         if let Err(err) = writer::append_record(&self.data_dir, &record) {
             eprintln!("[pi0] failed to append record: {err:#}");
-        }
-    }
-
-    // ---- hotkey combo detection -------------------------------------------
-
-    /// Update the held-key set and fire the hotkey callback on the rising edge
-    /// of a fully-satisfied combo (when capture-on-hotkey is enabled).
-    pub fn update_hotkey(&self, scancode: u32, down: bool) {
-        {
-            let mut pressed = self.pressed.borrow_mut();
-            if down {
-                if !pressed.contains(&scancode) {
-                    pressed.push(scancode);
-                }
-            } else {
-                pressed.retain(|&c| c != scancode);
-            }
-        }
-
-        let combo = self.shared.hotkey();
-        if combo.is_empty() {
-            return;
-        }
-        let satisfied = {
-            let pressed = self.pressed.borrow();
-            combo.iter().all(|c| pressed.contains(c))
-        };
-
-        if satisfied && !self.hotkey_armed.get() {
-            self.hotkey_armed.set(true);
-            if self.shared.capture_on_hotkey() {
-                (self.notify_hotkey)();
-            }
-        } else if !satisfied && self.hotkey_armed.get() {
-            self.hotkey_armed.set(false);
         }
     }
 }

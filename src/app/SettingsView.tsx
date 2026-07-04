@@ -7,7 +7,6 @@ import {
     InputNumber,
     Message,
     Spin,
-    Switch,
     Typography,
 } from '@arco-design/web-react';
 import { IconSave } from '@arco-design/web-react/icon';
@@ -19,7 +18,6 @@ const FormItem = Form.Item;
 
 interface SettingsForm {
     intervalSec: number;
-    captureOnHotkey: boolean;
     mcpPort: number;
 }
 
@@ -33,7 +31,6 @@ export function SettingsView() {
             setSettings(s);
             form.setFieldsValue({
                 intervalSec: Math.round(s.intervalMs / 1000),
-                captureOnHotkey: s.captureOnHotkey,
                 mcpPort: s.mcpPort,
             });
         });
@@ -49,8 +46,6 @@ export function SettingsView() {
                     3_600_000,
                     Math.max(1000, Math.round(values.intervalSec) * 1000),
                 ),
-                hotkey: settings.hotkey,
-                captureOnHotkey: values.captureOnHotkey,
                 mcpPort: values.mcpPort,
             });
             setSettings(next);
@@ -76,7 +71,6 @@ export function SettingsView() {
                 style={{ maxWidth: 440 }}
                 initialValues={{
                     intervalSec: Math.round(settings.intervalMs / 1000),
-                    captureOnHotkey: settings.captureOnHotkey,
                     mcpPort: settings.mcpPort,
                 }}
             >
@@ -93,15 +87,6 @@ export function SettingsView() {
                         suffix="seconds"
                         style={{ width: 200 }}
                     />
-                </FormItem>
-
-                <FormItem
-                    label="Capture on hotkey"
-                    field="captureOnHotkey"
-                    triggerPropName="checked"
-                    extra={`Triggers a screenshot when you press ${settings.hotkey.join(' + ')}`}
-                >
-                    <Switch />
                 </FormItem>
 
                 <FormItem label="Data folder">

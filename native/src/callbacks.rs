@@ -56,9 +56,6 @@ fn handle_input_value(state: &HidState, value: &IOHIDValue) {
         eprintln!("[pi0] key scancode={scancode} down={down}");
     }
 
-    // Feed the hotkey matcher first (independent of whether the key is printable).
-    state.update_hotkey(scancode, down);
-
     let Some(entry) = keymap::lookup(scancode) else {
         return;
     };

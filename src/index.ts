@@ -89,16 +89,10 @@ function bootstrap(): void {
             return { running: false, error: 'settings not loaded' };
         }
         try {
-            native.start(
-                {
-                    dataDir: settings.dataDir,
-                    intervalMs: settings.intervalMs,
-                    hotkey: settings.hotkey,
-                    captureOnHotkey: settings.captureOnHotkey,
-                },
-                // Hotkey fires this on the JS main thread (via the addon's TSFN).
-                () => void captureNow(),
-            );
+            native.start({
+                dataDir: settings.dataDir,
+                intervalMs: settings.intervalMs,
+            });
             restartTimer();
             broadcastRunning();
             return { running: true };
@@ -288,7 +282,6 @@ function bootstrap(): void {
             });
             settings = next;
             if (native.isRunning()) {
-                native.updateSettings(next.intervalMs, next.hotkey, next.captureOnHotkey);
                 restartTimer();
             }
             if (next.mcpPort !== previousPort) {

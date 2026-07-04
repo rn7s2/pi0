@@ -1,8 +1,7 @@
 //! HID keyboard/keypad usage (scancode) → human-readable key mapping.
 //!
 //! Ported from ../native-key-logger. Classifies each entry so the callback
-//! logic needs no magic-number range checks, and adds a reverse lookup so a
-//! hotkey configured by name (e.g. `"LCMD"`) resolves back to a scancode.
+//! logic needs no magic-number range checks.
 
 /// How a key should be treated when logged.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -158,53 +157,6 @@ pub fn lookup(usage: u32) -> Option<KeyEntry> {
         229 => m("\\RS"),   // right shift
         230 => m("\\RA"),   // right alt
         231 => m("\\RCMD"), // right command
-        _ => None,
-    }
-}
-
-/// Resolve a hotkey token (e.g. `"LCMD"`, `"S"`, `"4"`, `"SPACE"`) to a HID
-/// scancode. Case-insensitive; accepts modifier names, single letters/digits,
-/// and a few common named keys.
-pub fn scancode_for_name(name: &str) -> Option<u32> {
-    let n = name.trim().to_ascii_uppercase();
-    // Modifiers (accept with or without a leading backslash).
-    let stripped = n.strip_prefix('\\').unwrap_or(&n);
-    let modifier = match stripped {
-        "LC" | "LCTRL" | "LCONTROL" => Some(224),
-        "LS" | "LSHIFT" => Some(225),
-        "LA" | "LALT" | "LOPTION" => Some(226),
-        "LCMD" | "LMETA" | "LWIN" | "CMD" | "COMMAND" | "META" => Some(227),
-        "RC" | "RCTRL" | "RCONTROL" => Some(228),
-        "RS" | "RSHIFT" => Some(229),
-        "RA" | "RALT" | "ROPTION" => Some(230),
-        "RCMD" | "RMETA" | "RWIN" => Some(231),
-        "CTRL" | "CONTROL" => Some(224),
-        "SHIFT" => Some(225),
-        "ALT" | "OPTION" => Some(226),
-        _ => None,
-    };
-    if modifier.is_some() {
-        return modifier;
-    }
-    // Single letter a–z.
-    if stripped.len() == 1 {
-        let c = stripped.as_bytes()[0];
-        if c.is_ascii_alphabetic() {
-            return Some(4 + (c.to_ascii_uppercase() - b'A') as u32);
-        }
-        // Digits 1–9,0.
-        match c {
-            b'1'..=b'9' => return Some(30 + (c - b'1') as u32),
-            b'0' => return Some(39),
-            _ => {}
-        }
-    }
-    // A few named keys.
-    match stripped {
-        "SPACE" | "SPACEBAR" => Some(44),
-        "ENTER" | "RETURN" => Some(40),
-        "TAB" => Some(43),
-        "ESC" | "ESCAPE" => Some(41),
         _ => None,
     }
 }

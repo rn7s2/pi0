@@ -35,7 +35,7 @@ struct RunLoopHandle(CFRetained<CFRunLoop>);
 unsafe impl Send for RunLoopHandle {}
 
 /// A live capture engine: the HID thread plus the handles needed to stop it and
-/// to service `capture_snapshot` / `update_settings`.
+/// to service `capture_snapshot` (frontmost-app name + data dir).
 pub struct EngineHandle {
     join: Option<JoinHandle<()>>,
     run_loop: RunLoopHandle,
@@ -62,11 +62,7 @@ impl EngineHandle {
 /// Spawn the HID thread and block briefly until it reports whether the HID
 /// manager opened (i.e. whether Input Monitoring is granted). Returns an error
 /// with a TCC hint if it did not.
-pub fn spawn(
-    data_dir: PathBuf,
-    shared: Arc<Shared>,
-    notify_hotkey: Box<dyn Fn() + Send>,
-) -> Result<EngineHandle> {
+pub fn spawn(data_dir: PathBuf, shared: Arc<Shared>) -> Result<EngineHandle> {
     let running = Arc::new(AtomicBool::new(true));
     let (tx, rx) = mpsc::channel::<std::result::Result<RunLoopHandle, String>>();
 
@@ -76,15 +72,7 @@ pub fn spawn(
 
     let join = std::thread::Builder::new()
         .name("pi0-hid".to_string())
-        .spawn(move || {
-            hid_thread_main(
-                data_dir_thread,
-                shared_thread,
-                notify_hotkey,
-                running_thread,
-                tx,
-            )
-        })?;
+        .spawn(move || hid_thread_main(data_dir_thread, shared_thread, running_thread, tx))?;
 
     match rx.recv() {
         Ok(Ok(run_loop)) => Ok(EngineHandle {
@@ -111,13 +99,12 @@ pub fn spawn(
 fn hid_thread_main(
     data_dir: PathBuf,
     shared: Arc<Shared>,
-    notify_hotkey: Box<dyn Fn() + Send>,
     running: Arc<AtomicBool>,
     tx: mpsc::Sender<std::result::Result<RunLoopHandle, String>>,
 ) {
     // Boxed so its address is stable for the C callback `context` pointer, and
     // kept alive on this stack for the whole run-loop lifetime.
-    let state = Box::new(HidState::new(data_dir, shared, notify_hotkey));
+    let state = Box::new(HidState::new(data_dir, shared));
 
     let manager = IOHIDManager::new(None, kIOHIDOptionsTypeNone);
 

@@ -3,9 +3,6 @@
 // addon returns. Imported by both the main and renderer bundles.
 import { z } from 'zod';
 
-/** Default hotkey combo (Ctrl+Shift+S) as keymap tokens the addon understands. */
-export const DEFAULT_HOTKEY = ['LC', 'LS', 'S'];
-
 /** Default localhost port the MCP server listens on. */
 export const DEFAULT_MCP_PORT = 31415;
 
@@ -19,10 +16,6 @@ export const SettingsSchema = z.object({
      * there is no master switch anymore, only the cadence.
      */
     intervalMs: z.number().int().min(1000).max(3_600_000).default(8_000),
-    /** Screenshot hotkey as keymap tokens, e.g. ["LC","LS","S"]. */
-    hotkey: z.array(z.string()).min(1).default(DEFAULT_HOTKEY),
-    /** Whether the hotkey triggers a screenshot. */
-    captureOnHotkey: z.boolean().default(true),
     /** Localhost port the MCP server (Streamable HTTP) listens on. */
     mcpPort: z.number().int().min(1024).max(65535).default(DEFAULT_MCP_PORT),
 });

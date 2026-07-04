@@ -11,10 +11,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
 
 use napi::bindgen_prelude::{AsyncTask, Error, Result};
-use napi::threadsafe_function::{
-    ErrorStrategy, ThreadSafeCallContext, ThreadsafeFunction, ThreadsafeFunctionCallMode,
-};
-use napi::{Env, JsFunction, JsUnknown, Task};
+use napi::{Env, Task};
 use napi_derive::napi;
 use objc2::rc::Retained;
 use objc2::runtime::{NSObjectProtocol, ProtocolObject};
@@ -67,10 +64,6 @@ pub struct EngineConfig {
     pub data_dir: String,
     /// Snapshot interval in ms (the JS side drives the timer; kept for parity).
     pub interval_ms: u32,
-    /// Hotkey combo as key tokens, e.g. `["LC", "LS", "S"]`.
-    pub hotkey: Vec<String>,
-    /// Whether the hotkey should trigger a screenshot.
-    pub capture_on_hotkey: bool,
 }
 
 /// A keystroke record returned by `query_text` (maps to zod `TextRecordSchema`).
@@ -116,29 +109,19 @@ pub struct PermissionStatus {
 /// HID thread. Returns an error (with a TCC hint) if Input Monitoring is denied.
 /// Idempotent: a no-op if already running.
 #[napi]
-pub fn start(config: EngineConfig, on_hotkey: JsFunction) -> Result<()> {
+pub fn start(config: EngineConfig) -> Result<()> {
     if is_running() {
         return Ok(());
     }
 
     let data_dir = PathBuf::from(&config.data_dir);
-    let codes = resolve_hotkey(&config.hotkey);
-    let shared = Shared::new(codes, config.capture_on_hotkey);
+    let shared = Shared::new();
 
     // Observer lives on the main thread; keep its token for removal on stop.
     let token = app_monitor::install(Arc::clone(&shared));
     OBSERVER.with(|slot| *slot.borrow_mut() = Some(token));
 
-    // Bridge the JS hotkey callback to a Send notifier the HID thread can call.
-    let tsfn: ThreadsafeFunction<(), ErrorStrategy::Fatal> = on_hotkey
-        .create_threadsafe_function(0, |_ctx: ThreadSafeCallContext<()>| {
-            Ok(Vec::<JsUnknown>::new())
-        })?;
-    let notify: Box<dyn Fn() + Send> = Box::new(move || {
-        tsfn.call((), ThreadsafeFunctionCallMode::NonBlocking);
-    });
-
-    match engine::spawn(data_dir.clone(), Arc::clone(&shared), notify) {
+    match engine::spawn(data_dir.clone(), Arc::clone(&shared)) {
         Ok(handle) => {
             *engine_slot().lock().unwrap() = Some(handle);
             // Contextualise any screenshots a previous run left behind (crash,
@@ -173,28 +156,6 @@ pub fn is_running() -> bool {
         .unwrap()
         .as_ref()
         .map_or(false, |h| h.is_running())
-}
-
-/// Update the hotkey combo and capture-on-hotkey flag on a live engine. The
-/// snapshot interval is driven by the JS `setInterval`, so it is ignored here.
-#[napi]
-pub fn update_settings(
-    _interval_ms: u32,
-    hotkey: Vec<String>,
-    capture_on_hotkey: bool,
-) -> Result<()> {
-    if let Some(handle) = engine_slot().lock().unwrap().as_ref() {
-        handle.shared.set_hotkey(resolve_hotkey(&hotkey));
-        handle.shared.set_capture_on_hotkey(capture_on_hotkey);
-    }
-    Ok(())
-}
-
-fn resolve_hotkey(tokens: &[String]) -> Vec<u32> {
-    tokens
-        .iter()
-        .filter_map(|t| keymap::scancode_for_name(t))
-        .collect()
 }
 
 // ---- screenshots (ScreenCaptureKit) ----------------------------------------
