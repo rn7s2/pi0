@@ -1,23 +1,36 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Spin } from '@arco-design/web-react';
 
+import { PasswordGate } from './PasswordGate';
 import { PermissionGuard } from './PermissionGuard';
 import { SettingsView } from './SettingsView';
 
-// 'checking' → probing perms; 'guard' → blocking modal; 'ready' → app usable.
-type Phase = 'checking' | 'guard' | 'ready';
+// 'checking' → probing store/perms; 'password' → unlock/create the encrypted
+// store; 'guard' → macOS permission modal; 'ready' → settings usable.
+type Phase = 'checking' | 'password' | 'guard' | 'ready';
 
-// The main window is purely a settings window (M3): the permission guard, then
-// the settings form. Recording is controlled from the tray float panel.
+// The main window gates on the encrypted store first (the password prompt), then
+// the macOS permission guard, then the settings form. Recording is controlled
+// from the tray float panel.
 export function App() {
     const [phase, setPhase] = useState<Phase>('checking');
 
-    // Boot gate: skip the modal entirely when both grants are already in place.
-    useEffect(() => {
-        void window.pi0.permissionsStatus().then((p) => {
-            setPhase(p.inputMonitoring && p.screenRecording ? 'ready' : 'guard');
-        });
+    // Once the store is unlocked, the only remaining gate is macOS permissions.
+    const afterUnlock = useCallback(async () => {
+        const p = await window.pi0.permissionsStatus();
+        setPhase(p.inputMonitoring && p.screenRecording ? 'ready' : 'guard');
     }, []);
+
+    useEffect(() => {
+        void (async () => {
+            const status = await window.pi0.dbStatus();
+            if (status.unlocked) {
+                await afterUnlock();
+            } else {
+                setPhase('password');
+            }
+        })();
+    }, [afterUnlock]);
 
     if (phase === 'checking') {
         return (
@@ -26,12 +39,15 @@ export function App() {
             </div>
         );
     }
+    if (phase === 'password') {
+        return <PasswordGate onUnlocked={() => void afterUnlock()} />;
+    }
     if (phase === 'guard') {
         return <PermissionGuard onGranted={() => setPhase('ready')} />;
     }
 
     return (
-        <div className="app content">
+        <div className="app">
             <SettingsView />
         </div>
     );

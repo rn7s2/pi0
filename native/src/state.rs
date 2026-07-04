@@ -8,12 +8,12 @@
 //!   (`RefCell`/`Cell`), exactly like the standalone reference.
 
 use std::cell::{Cell, RefCell};
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use arc_swap::ArcSwap;
 
-use crate::writer::{self, Record};
+use crate::db;
+use crate::writer::Record;
 
 /// Rotate the in-memory keystroke buffer into a new record after it has been
 /// open this long, so time-range queries stay meaningful.
@@ -66,24 +66,18 @@ struct Buffer {
 /// HID-thread-only state. Reconstructed from the C callback `context` pointer;
 /// only ever touched on the HID thread, so `RefCell`/`Cell` need no locking.
 pub struct HidState {
-    data_dir: PathBuf,
     shared: Arc<Shared>,
     buffer: RefCell<Option<Buffer>>,
     capslock: Cell<bool>,
 }
 
 impl HidState {
-    pub fn new(data_dir: PathBuf, shared: Arc<Shared>) -> Self {
+    pub fn new(shared: Arc<Shared>) -> Self {
         Self {
-            data_dir,
             shared,
             buffer: RefCell::new(None),
             capslock: Cell::new(false),
         }
-    }
-
-    pub fn shared(&self) -> &Arc<Shared> {
-        &self.shared
     }
 
     pub fn capslock(&self) -> bool {
@@ -144,8 +138,8 @@ impl HidState {
             app_raw: buffer.app.raw,
             text: buffer.text,
         };
-        if let Err(err) = writer::append_record(&self.data_dir, &record) {
-            eprintln!("[pi0] failed to append record: {err:#}");
+        if let Err(err) = db::insert_text_record(&record) {
+            eprintln!("[pi0] failed to store text record: {err:#}");
         }
     }
 }

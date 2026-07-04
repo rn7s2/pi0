@@ -66,13 +66,12 @@ pub fn spawn(data_dir: PathBuf, shared: Arc<Shared>) -> Result<EngineHandle> {
     let running = Arc::new(AtomicBool::new(true));
     let (tx, rx) = mpsc::channel::<std::result::Result<RunLoopHandle, String>>();
 
-    let data_dir_thread = data_dir.clone();
     let shared_thread = Arc::clone(&shared);
     let running_thread = Arc::clone(&running);
 
     let join = std::thread::Builder::new()
         .name("pi0-hid".to_string())
-        .spawn(move || hid_thread_main(data_dir_thread, shared_thread, running_thread, tx))?;
+        .spawn(move || hid_thread_main(shared_thread, running_thread, tx))?;
 
     match rx.recv() {
         Ok(Ok(run_loop)) => Ok(EngineHandle {
@@ -97,14 +96,13 @@ pub fn spawn(data_dir: PathBuf, shared: Arc<Shared>) -> Result<EngineHandle> {
 /// thread's run loop, open it, signal readiness, then run the loop until
 /// `CFRunLoopStop`.
 fn hid_thread_main(
-    data_dir: PathBuf,
     shared: Arc<Shared>,
     running: Arc<AtomicBool>,
     tx: mpsc::Sender<std::result::Result<RunLoopHandle, String>>,
 ) {
     // Boxed so its address is stable for the C callback `context` pointer, and
     // kept alive on this stack for the whole run-loop lifetime.
-    let state = Box::new(HidState::new(data_dir, shared));
+    let state = Box::new(HidState::new(shared));
 
     let manager = IOHIDManager::new(None, kIOHIDOptionsTypeNone);
 

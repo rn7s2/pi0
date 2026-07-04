@@ -37,32 +37,22 @@ pub struct WrittenShot {
     pub ts: i64,
 }
 
-/// Capture **all attached displays** and write a PNG per display under
-/// `<data_dir>/<date>/<app>/shots/`, all sharing one `<ts>` so the set is
-/// grouped: `<ts>.png` for a single display, or `<ts>-m<i>.png` (main first)
-/// when there are several. Returns the written files with their metadata.
+/// Capture **all attached displays** and write a PNG per display flat under
+/// `<data_dir>/<app>/<ts>-<display>.png`, all sharing one `<ts>` so the set is
+/// grouped (display 0 = main). The picture is transient — OCR deletes it once
+/// contextualised. Returns the written files with their metadata.
 pub fn capture_to_file(data_dir: &Path, app: &AppName) -> Result<Vec<WrittenShot>> {
     let shots = capture_all_displays_png()?;
     let ts = paths::now_ms();
-    let date = paths::local_date_for_ms(ts);
-    let dir = paths::shots_dir(data_dir, &date, &app.sanitized);
+    let dir = paths::app_dir(data_dir, &app.sanitized);
     std::fs::create_dir_all(&dir)?;
 
-    let multi = shots.len() > 1;
     let mut written = Vec::with_capacity(shots.len());
     for (index, png) in &shots {
-        let name = if multi {
-            format!("{ts}-m{index}.png")
-        } else {
-            format!("{ts}.png")
-        };
-        let path = dir.join(name);
+        let display = *index as u32;
+        let path = paths::shot_path(data_dir, &app.sanitized, ts, display);
         std::fs::write(&path, png)?;
-        written.push(WrittenShot {
-            path,
-            display: *index as u32,
-            ts,
-        });
+        written.push(WrittenShot { path, display, ts });
     }
     Ok(written)
 }

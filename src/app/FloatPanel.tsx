@@ -41,7 +41,7 @@ export function FloatPanel() {
             } else {
                 const res = await window.pi0.startCapture();
                 if (!res.running) {
-                    setError(res.error ? 'Permission needed — open pi0' : 'Could not start');
+                    setError(res.error ? 'Open pi0 first' : 'Could not start');
                 }
             }
         } finally {

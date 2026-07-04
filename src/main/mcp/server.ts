@@ -13,6 +13,7 @@ import { z } from 'zod';
 import * as native from '@pi0/native';
 
 import { AppUsageArraySchema, ContextRecordArraySchema } from '../../shared/schemas';
+import { isAuthorized } from './auth';
 import { DEFAULT_GUIDANCE, GENERAL_GUIDANCE, GUIDANCE, guidanceFor } from './guidance';
 
 /** Shape of the addon's paginated context result. */
@@ -36,9 +37,10 @@ Conventions: timestamps accept epoch milliseconds or ISO-8601 strings; every OCR
 
 The tool set is versioned and will grow; re-read tool descriptions when you reconnect.`;
 
-/** What the server needs from the app (read lazily so settings changes apply). */
+/** What the server needs from the app (read lazily so it always sees the latest). */
 export interface McpDeps {
-    getDataDir: () => string;
+    /** The bearer token every request must present (lives in the encrypted store). */
+    getToken: () => string;
 }
 
 /** A running MCP server; `close` releases the port. */
@@ -102,7 +104,7 @@ function jsonTool<A>(handler: (args: A) => Promise<unknown>) {
 
 // ---- server -----------------------------------------------------------------
 
-function buildServer(deps: McpDeps): McpServer {
+function buildServer(): McpServer {
     const server = new McpServer(
         { name: SERVER_NAME, version: SERVER_VERSION },
         { instructions: INSTRUCTIONS },
@@ -118,7 +120,7 @@ function buildServer(deps: McpDeps): McpServer {
         },
         jsonTool(async ({ start, end }: { start: number | string; end: number | string }) => {
             const { startMs, endMs } = parseRange(start, end);
-            const raw = await native.queryApps({ dataDir: deps.getDataDir(), startMs, endMs });
+            const raw = await native.queryApps({ startMs, endMs });
             const apps = AppUsageArraySchema.parse(raw);
             return {
                 timerange: { startMs, endMs, start: iso(startMs), end: iso(endMs) },
@@ -198,7 +200,6 @@ function buildServer(deps: McpDeps): McpServer {
             }) => {
                 const { startMs, endMs } = parseRange(start, end);
                 const raw = await native.queryContexts({
-                    dataDir: deps.getDataDir(),
                     startMs,
                     endMs,
                     app: app?.trim() || undefined,
@@ -249,8 +250,24 @@ export function startMcpServer(port: number, deps: McpDeps): Promise<McpHandle> 
                 res.writeHead(404).end();
                 return;
             }
+            // Auth is the mandatory floor: reject anything without a valid bearer
+            // token before building the server/transport. Loopback binding stops
+            // remote callers; this stops any *local* program that opens the port.
+            if (!isAuthorized(req.headers.authorization, deps.getToken())) {
+                res.writeHead(401, {
+                    'www-authenticate': 'Bearer',
+                    'content-type': 'application/json',
+                }).end(
+                    JSON.stringify({
+                        jsonrpc: '2.0',
+                        error: { code: -32001, message: 'Unauthorized' },
+                        id: null,
+                    }),
+                );
+                return;
+            }
             try {
-                const server = buildServer(deps);
+                const server = buildServer();
                 const transport = new StreamableHTTPServerTransport({
                     sessionIdGenerator: undefined, // stateless
                     enableJsonResponse: true,

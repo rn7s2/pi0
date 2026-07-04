@@ -18,7 +18,8 @@ use std::sync::{Mutex, OnceLock};
 use anyhow::{anyhow, Context, Result};
 use ocr_rs::{Backend, OcrEngine, OcrEngineConfig};
 
-use crate::context_store::{self, ContextRecord, OcrItem};
+use crate::context_store::{ContextRecord, OcrItem};
+use crate::db;
 
 // PP-OCRv6 small tier: detection + recognition + the tier's charset (the
 // charset is tier-specific and mandatory for decoding recognition output).
@@ -28,8 +29,6 @@ const CHARSET: &[u8] = include_bytes!("../models/ppocr_keys_v6_small.txt");
 
 /// One written screenshot waiting to be contextualised.
 pub struct PendingShot {
-    /// Data root the context record is appended under.
-    pub data_dir: PathBuf,
     /// The PNG to OCR — deleted once processed, success or not.
     pub png_path: PathBuf,
     /// Epoch ms the screenshot was taken (shared across a multi-display set).
@@ -115,19 +114,24 @@ fn worker_loop(rx: Receiver<Job>) {
     }
 }
 
-/// OCR one screenshot into a context record, then delete the picture. The
-/// deletion is unconditional — the image never outlives contextualisation,
-/// even when OCR fails (the failure is logged and the pixels are gone).
+/// OCR one screenshot into the store, then delete the picture. The image never
+/// outlives contextualisation — even when OCR itself fails (the failure is
+/// logged and the pixels dropped) — with one exception: if the database is
+/// locked the text couldn't be stored, so the picture is kept for the next
+/// sweep to retry rather than lost.
 fn process_shot(engine: &OcrEngine, shot: &PendingShot) {
     if let Err(err) = contextualise(engine, shot) {
         eprintln!("[pi0] OCR failed for {}: {err:#}", shot.png_path.display());
+        if !db::is_open() {
+            return; // DB locked — leave the picture for a later sweep.
+        }
     }
     if let Err(err) = std::fs::remove_file(&shot.png_path) {
         if err.kind() != std::io::ErrorKind::NotFound {
             eprintln!("[pi0] failed to delete {}: {err}", shot.png_path.display());
         }
     }
-    // Drop the shots/ folder once it's empty again (fails harmlessly if not).
+    // Drop the per-app folder once it's empty again (fails harmlessly if not).
     if let Some(parent) = shot.png_path.parent() {
         let _ = std::fs::remove_dir(parent);
     }
@@ -158,56 +162,47 @@ fn contextualise(engine: &OcrEngine, shot: &PendingShot) -> Result<()> {
 
     // An empty item list is still recorded: "this app was frontmost at ts with
     // nothing readable on screen" is context too.
-    context_store::append_context(
-        &shot.data_dir,
-        &ContextRecord {
-            ts: shot.ts,
-            app: shot.app.clone(),
-            app_raw: shot.app_raw.clone(),
-            display: shot.display,
-            items,
-        },
-    )
+    db::insert_context(&ContextRecord {
+        ts: shot.ts,
+        app: shot.app.clone(),
+        app_raw: shot.app_raw.clone(),
+        display: shot.display,
+        items,
+    })
 }
 
-/// Walk `<data_dir>/<date>/<app>/shots/*.png` for pictures a previous run left
-/// behind. The app name comes from the folder (raw name is unrecoverable, so
-/// it doubles as `appRaw`); ts + display index are parsed from the file name
-/// (`<ts>.png` or `<ts>-m<i>.png`).
+/// Walk `<data_dir>/<app>/<ts>-<display>.png` for pictures a previous run left
+/// behind (crash/quit while queued). The app name comes from the folder (the
+/// raw name is unrecoverable, so it doubles as `appRaw`); ts + display index are
+/// parsed from the file name.
 fn find_stray_shots(data_dir: &Path) -> Vec<PendingShot> {
     let mut out = Vec::new();
-    let Ok(dates) = std::fs::read_dir(data_dir) else {
+    let Ok(apps) = std::fs::read_dir(data_dir) else {
         return out;
     };
-    for date in dates.flatten().filter(is_dir) {
-        let Ok(apps) = std::fs::read_dir(date.path()) else {
+    for app_entry in apps.flatten().filter(is_dir) {
+        let app = app_entry.file_name().to_string_lossy().into_owned();
+        let Ok(shots) = std::fs::read_dir(app_entry.path()) else {
             continue;
         };
-        for app_entry in apps.flatten().filter(is_dir) {
-            let app = app_entry.file_name().to_string_lossy().into_owned();
-            let Ok(shots) = std::fs::read_dir(app_entry.path().join("shots")) else {
+        for shot in shots.flatten() {
+            let path = shot.path();
+            if path.extension().is_none_or(|e| e != "png") {
+                continue;
+            }
+            let Some(stem) = path.file_stem().and_then(|s| s.to_str()) else {
                 continue;
             };
-            for shot in shots.flatten() {
-                let path = shot.path();
-                if path.extension().is_none_or(|e| e != "png") {
-                    continue;
-                }
-                let Some(stem) = path.file_stem().and_then(|s| s.to_str()) else {
-                    continue;
-                };
-                let Some((ts, display)) = parse_shot_stem(stem) else {
-                    continue;
-                };
-                out.push(PendingShot {
-                    data_dir: data_dir.to_path_buf(),
-                    png_path: path,
-                    ts,
-                    app: app.clone(),
-                    app_raw: app.clone(),
-                    display,
-                });
-            }
+            let Some((ts, display)) = parse_shot_stem(stem) else {
+                continue;
+            };
+            out.push(PendingShot {
+                png_path: path,
+                ts,
+                app: app.clone(),
+                app_raw: app.clone(),
+                display,
+            });
         }
     }
     out
@@ -217,12 +212,11 @@ fn is_dir(entry: &std::fs::DirEntry) -> bool {
     entry.file_type().map(|t| t.is_dir()).unwrap_or(false)
 }
 
-/// `"1751527334123"` → `(ts, 0)`; `"1751527334123-m2"` → `(ts, 2)`.
+/// `"1751527334123-2"` → `(1751527334123, 2)`. Rejects anything not shaped like
+/// `<ts>-<display>`.
 fn parse_shot_stem(stem: &str) -> Option<(i64, u32)> {
-    match stem.split_once("-m") {
-        Some((ts, index)) => Some((ts.parse().ok()?, index.parse().ok()?)),
-        None => Some((stem.parse().ok()?, 0)),
-    }
+    let (ts, display) = stem.rsplit_once('-')?;
+    Some((ts.parse().ok()?, display.parse().ok()?))
 }
 
 #[cfg(test)]
@@ -231,13 +225,11 @@ mod tests {
 
     #[test]
     fn parses_shot_stems() {
-        assert_eq!(parse_shot_stem("1751527334123"), Some((1751527334123, 0)));
-        assert_eq!(
-            parse_shot_stem("1751527334123-m2"),
-            Some((1751527334123, 2))
-        );
+        assert_eq!(parse_shot_stem("1751527334123-0"), Some((1751527334123, 0)));
+        assert_eq!(parse_shot_stem("1751527334123-2"), Some((1751527334123, 2)));
+        assert_eq!(parse_shot_stem("1751527334123"), None);
         assert_eq!(parse_shot_stem("not-a-shot"), None);
-        assert_eq!(parse_shot_stem("123-mx"), None);
+        assert_eq!(parse_shot_stem("123-x"), None);
     }
 
     /// Full pipeline smoke test against a real image with text. Opt-in (engine
@@ -249,19 +241,18 @@ mod tests {
         let src = std::env::var("PI0_OCR_TEST_IMAGE").expect("set PI0_OCR_TEST_IMAGE");
         let data_dir = std::env::temp_dir().join(format!("pi0-ocr-smoke-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&data_dir);
+        db::open(&data_dir, "test-pw").expect("open db");
 
         let ts = crate::paths::now_ms();
-        let date = crate::paths::local_date_for_ms(ts);
-        let shots = crate::paths::shots_dir(&data_dir, &date, "TestApp");
-        std::fs::create_dir_all(&shots).unwrap();
-        let png = shots.join(format!("{ts}.png"));
+        let app_dir = crate::paths::app_dir(&data_dir, "TestApp");
+        std::fs::create_dir_all(&app_dir).unwrap();
+        let png = crate::paths::shot_path(&data_dir, "TestApp", ts, 0);
         std::fs::copy(&src, &png).unwrap();
 
         let engine = build_engine().expect("engine should build from embedded models");
         process_shot(
             &engine,
             &PendingShot {
-                data_dir: data_dir.clone(),
                 png_path: png.clone(),
                 ts,
                 app: "TestApp".to_string(),
@@ -271,11 +262,9 @@ mod tests {
         );
 
         assert!(!png.exists(), "picture must be deleted after OCR");
-        assert!(!shots.exists(), "empty shots dir should be cleaned up");
 
-        let contexts = crate::paths::contexts_file(&data_dir, &date, "TestApp");
-        let line = std::fs::read_to_string(&contexts).expect("contexts.jsonl written");
-        let record: ContextRecord = serde_json::from_str(line.lines().next().unwrap()).unwrap();
+        let page = db::query_contexts(ts - 1, ts + 1, Some("TestApp"), 0, 10).unwrap();
+        let record = &page.records[0];
         assert_eq!(record.ts, ts);
         assert!(!record.items.is_empty(), "expected recognised text lines");
         for item in &record.items {
@@ -288,6 +277,7 @@ mod tests {
             }
         }
 
+        db::close();
         let _ = std::fs::remove_dir_all(&data_dir);
     }
 }

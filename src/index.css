@@ -18,16 +18,7 @@ body {
     height: 100vh;
 }
 
-.content {
-    overflow: auto;
-    padding: 20px;
-}
-
-.panel {
-    max-width: 800px;
-}
-
-/* blank boot screen while probing permissions */
+/* blank boot screen while probing the store / permissions */
 .app.boot {
     height: 100vh;
     display: flex;
@@ -36,23 +27,53 @@ body {
     background: var(--color-bg-1);
 }
 
-/* ---- permissions panel ---- */
-.perms {
-    margin-top: 4px;
-}
-.perm-row {
+/* ---- settings: scrollable body + fixed action row ---- */
+.settings {
+    height: 100%;
     display: flex;
-    align-items: center;
-    gap: 10px;
-    flex-wrap: wrap;
+    flex-direction: column;
 }
-.perm-label {
-    min-width: 150px;
+.settings-scroll {
+    flex: 1;
+    overflow: auto;
+    padding: 20px 24px;
 }
-.perm-hint {
-    flex-basis: 100%;
-    margin-left: 18px;
+.settings-section {
+    max-width: 560px;
+    padding-bottom: 8px;
+    margin-bottom: 20px;
+    border-bottom: 1px solid var(--color-border-2);
+}
+.settings-section:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+}
+.settings-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    padding: 12px 24px;
+    border-top: 1px solid var(--color-border-2);
+    background: var(--color-bg-2);
+}
+
+/* a labelled field inside a settings section */
+.field {
+    margin-bottom: 16px;
+}
+.field:last-child {
+    margin-bottom: 0;
+}
+.field-label {
+    margin-bottom: 6px;
+    font-weight: 500;
+    color: var(--color-text-1);
+}
+.field-hint {
+    margin-top: 6px;
     font-size: 12px;
+    line-height: 1.5;
+    color: var(--color-text-3);
 }
 
 /* ---- permission guard modal ---- */

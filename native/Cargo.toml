@@ -16,6 +16,10 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 arc-swap = "1"
 
+# Encrypted, on-device store. SQLCipher (bundled) gives a password-protected
+# SQLite DB with WAL; OpenSSL is vendored so the addon is self-contained.
+rusqlite = { version = "0.32", features = ["bundled-sqlcipher-vendored-openssl"] }
+
 # macOS system frameworks (mirrors ../native-key-logger, extended for pi0).
 objc2 = "0.6"
 objc2-foundation = "0.3"

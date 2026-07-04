@@ -8,6 +8,14 @@ export const IPC = {
     startCapture: 'pi0:startCapture',
     stopCapture: 'pi0:stopCapture',
     isRunning: 'pi0:isRunning',
+    /** Renderer → main: is the encrypted store present / unlocked? */
+    dbStatus: 'pi0:dbStatus',
+    /** Renderer → main: open (or create) the store with a password. */
+    unlockDb: 'pi0:unlockDb',
+    /** Renderer → main: change the store password (verifies current first). */
+    changePassword: 'pi0:changePassword',
+    /** Renderer → main: fetch the MCP token + endpoint for the copy buttons. */
+    getMcpInfo: 'pi0:getMcpInfo',
     permissionsStatus: 'pi0:permissionsStatus',
     requestPermission: 'pi0:requestPermission',
     openPermissionSettings: 'pi0:openPermissionSettings',
@@ -20,8 +28,23 @@ export const IPC = {
     runningChanged: 'pi0:runningChanged',
 } as const;
 
-/** Result of a start-capture attempt (error carries the TCC hint, if any). */
+/** Result of a start-capture attempt (error carries the TCC/lock hint, if any). */
 export type StartResult = { running: boolean; error?: string };
+
+/** Whether the encrypted store exists on disk and whether it's unlocked. */
+export type DbStatus = { exists: boolean; unlocked: boolean };
+
+/** Result of an unlock/create attempt. `created` is true on first-run creation. */
+export type UnlockResult = { ok: boolean; created?: boolean; error?: string };
+
+/** Result of a password change (error is a human-readable reason on failure). */
+export type ChangePasswordResult = { ok: boolean; error?: string };
+
+/**
+ * MCP connection info surfaced to Settings. `token` is empty and `running` is
+ * false when the server couldn't start (e.g. the port was busy).
+ */
+export type McpInfo = { token: string; url: string; running: boolean };
 
 /** The typed API the preload exposes on `window.pi0`. */
 export interface Pi0Api {
@@ -30,6 +53,14 @@ export interface Pi0Api {
     startCapture(): Promise<StartResult>;
     stopCapture(): Promise<{ running: boolean }>;
     isRunning(): Promise<boolean>;
+    /** Whether the encrypted store exists on disk and whether it's unlocked. */
+    dbStatus(): Promise<DbStatus>;
+    /** Open (or create on first run) the encrypted store with `password`. */
+    unlockDb(password: string): Promise<UnlockResult>;
+    /** Change the store password (verifies `current` first). */
+    changePassword(current: string, next: string): Promise<ChangePasswordResult>;
+    /** Fetch the MCP token + endpoint (for the Copy Token / Copy for Agents buttons). */
+    getMcpInfo(): Promise<McpInfo>;
     permissionsStatus(): Promise<PermissionStatus>;
     /** Trigger the macOS TCC prompt for a grant; resolves to the fresh status. */
     requestPermission(kind: PermissionKind): Promise<PermissionStatus>;

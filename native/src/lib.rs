@@ -20,6 +20,7 @@ mod app_monitor;
 mod callbacks;
 mod capture;
 mod context_store;
+mod db;
 mod engine;
 mod keymap;
 mod ocr;
@@ -90,8 +91,6 @@ impl From<Record> for TextRecord {
 /// Parameters for a time-range text query.
 #[napi(object)]
 pub struct QueryParams {
-    /// Absolute data directory to scan.
-    pub data_dir: String,
     pub start_ms: f64,
     pub end_ms: f64,
 }
@@ -158,6 +157,48 @@ pub fn is_running() -> bool {
         .map_or(false, |h| h.is_running())
 }
 
+// ---- database (encrypted store) --------------------------------------------
+
+/// Whether an encrypted pi0 database already exists under `dataDir` (i.e. this
+/// is not first run — the UI shows "unlock" instead of "create").
+#[napi]
+pub fn db_exists(data_dir: String) -> bool {
+    db::exists(Path::new(&data_dir))
+}
+
+/// Open (or create, on first run) the encrypted database with `password`.
+/// Returns whether it was newly created. Rejects an incorrect password.
+#[napi]
+pub fn open_db(data_dir: String, password: String) -> Result<bool> {
+    db::open(Path::new(&data_dir), &password).map_err(|e| Error::from_reason(format!("{e:#}")))
+}
+
+/// Whether the database is currently unlocked.
+#[napi]
+pub fn is_db_open() -> bool {
+    db::is_open()
+}
+
+/// Change the database password. Verifies `current` against the password the DB
+/// was unlocked with, then re-encrypts in place.
+#[napi]
+pub fn change_password(current: String, new_password: String) -> Result<()> {
+    db::change_password(&current, &new_password)
+        .map_err(|e| Error::from_reason(format!("{e:#}")))
+}
+
+/// The MCP access token (minted and stored on first call). Requires an unlocked DB.
+#[napi]
+pub fn mcp_token() -> Result<String> {
+    db::mcp_token().map_err(|e| Error::from_reason(format!("{e:#}")))
+}
+
+/// Checkpoint and close the database (called before quit).
+#[napi]
+pub fn close_db() {
+    db::close();
+}
+
 // ---- screenshots (ScreenCaptureKit) ----------------------------------------
 
 /// Async ScreenCaptureKit capture running on a libuv worker thread. Reads the
@@ -176,14 +217,13 @@ impl Task for CaptureTask {
         let shots = capture::capture_to_file(&self.data_dir, &self.app)
             .map_err(|e| Error::from_reason(format!("{e:#}")))?;
         // Hand every written PNG to the OCR worker, which contextualises it
-        // into `contexts.jsonl` and deletes the picture afterwards.
+        // into the store and deletes the picture afterwards.
         let written = shots
             .iter()
             .map(|s| s.path.to_string_lossy().into_owned())
             .collect();
         for shot in shots {
             ocr::enqueue_shot(ocr::PendingShot {
-                data_dir: self.data_dir.clone(),
                 png_path: shot.path,
                 ts: shot.ts,
                 app: self.app.sanitized.clone(),
@@ -215,10 +255,8 @@ pub fn capture_snapshot() -> Result<AsyncTask<CaptureTask>> {
 
 // ---- data query ------------------------------------------------------------
 
-/// Async filesystem scan of `records.jsonl` files in a time range. Runs on a
-/// libuv worker thread (no objc state touched).
+/// Async time-range keystroke query against the store. Runs on a libuv worker.
 pub struct QueryTask {
-    data_dir: PathBuf,
     start_ms: i64,
     end_ms: i64,
 }
@@ -228,7 +266,7 @@ impl Task for QueryTask {
     type JsValue = Vec<TextRecord>;
 
     fn compute(&mut self) -> Result<Self::Output> {
-        writer::query(&self.data_dir, self.start_ms, self.end_ms)
+        db::query_text(self.start_ms, self.end_ms)
             .map_err(|e| Error::from_reason(format!("{e:#}")))
     }
 
@@ -241,7 +279,6 @@ impl Task for QueryTask {
 #[napi]
 pub fn query_text(params: QueryParams) -> AsyncTask<QueryTask> {
     AsyncTask::new(QueryTask {
-        data_dir: PathBuf::from(params.data_dir),
         start_ms: params.start_ms as i64,
         end_ms: params.end_ms as i64,
     })
@@ -300,8 +337,6 @@ impl From<context_store::ContextRecord> for ContextRecord {
 /// Parameters for a paginated context query.
 #[napi(object)]
 pub struct ContextQueryParams {
-    /// Absolute data directory to scan.
-    pub data_dir: String,
     pub start_ms: f64,
     pub end_ms: f64,
     /// Optional app filter (matches sanitized or raw name, case-insensitive).
@@ -319,7 +354,7 @@ pub struct ContextPage {
     pub records: Vec<ContextRecord>,
 }
 
-/// Async filesystem scan of `contexts.jsonl` files. Runs on a libuv worker.
+/// Async paginated context query against the store. Runs on a libuv worker.
 pub struct ContextsQueryTask {
     params: ContextQueryParams,
 }
@@ -329,8 +364,7 @@ impl Task for ContextsQueryTask {
     type JsValue = ContextPage;
 
     fn compute(&mut self) -> Result<Self::Output> {
-        context_store::query_contexts(
-            Path::new(&self.params.data_dir),
+        db::query_contexts(
             self.params.start_ms as i64,
             self.params.end_ms as i64,
             self.params.app.as_deref(),
@@ -374,7 +408,6 @@ pub struct AppUsage {
 
 /// Async aggregation of per-app usage across both stores. Runs on a libuv worker.
 pub struct AppsQueryTask {
-    data_dir: PathBuf,
     start_ms: i64,
     end_ms: i64,
 }
@@ -384,7 +417,7 @@ impl Task for AppsQueryTask {
     type JsValue = Vec<AppUsage>;
 
     fn compute(&mut self) -> Result<Self::Output> {
-        context_store::query_apps(&self.data_dir, self.start_ms, self.end_ms)
+        db::query_apps(self.start_ms, self.end_ms)
             .map_err(|e| Error::from_reason(format!("{e:#}")))
     }
 
@@ -408,7 +441,6 @@ impl Task for AppsQueryTask {
 #[napi]
 pub fn query_apps(params: QueryParams) -> AsyncTask<AppsQueryTask> {
     AsyncTask::new(AppsQueryTask {
-        data_dir: PathBuf::from(params.data_dir),
         start_ms: params.start_ms as i64,
         end_ms: params.end_ms as i64,
     })
