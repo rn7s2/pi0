@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { IconDesktop, IconPoweroff, IconRight } from '@arco-design/web-react/icon';
+import { IconPoweroff, IconRight, IconSettings } from '@arco-design/web-react/icon';
 
 /**
  * Tray float panel. Three rows, per the milestone:
- *  1. toggle the main window's visibility
+ *  1. toggle the main (settings) window's visibility
  *  2. toggle recording on/off (the whole row is the hit target; the switch on
  *     the right is a visual indicator, not a separate control)
  *  3. quit the whole application
@@ -53,9 +53,9 @@ export function FloatPanel() {
         <div className="fp" ref={cardRef}>
             <button className="fp-row" onClick={() => void window.pi0.toggleMainWindow()}>
                 <span className="fp-icon">
-                    <IconDesktop />
+                    <IconSettings />
                 </span>
-                <span className="fp-label">Open pi0 window</span>
+                <span className="fp-label">Settings</span>
                 <IconRight className="fp-chevron" />
             </button>
 
