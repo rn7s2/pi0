@@ -4,6 +4,34 @@ let's design a personal intelligence workbench. I call this pi0 for now. It coul
 
 do make the plan clean, short and easy to understand.
 
+## milestone 4, 20260704-1
+
+### functionality requirements
+
+- main window once shown, should always be shown in dock, but when hidden it must not show up in dock
+- remove "Data folder" in Settings
+- when launching, prompt to ask user to enter a password, which will be used as password for sqlite
+- warn user this password can not be recovered once forget
+- settings page does not require password
+- user must be able to change this password in Settings, of course enter correct password first
+- settings ordering: capture settings -> mcp server -> password reset
+- macos permissions is not needed because we already have launch guard
+- all settings wrapped inside a scrollable pane, and in the bottom a fixed row of Revert+Save button
+- revert and save button must have proper disabled status
+- mcp server instead of current "save" button, two buttons:
+  - Copy Token: copy token generated to clipboard
+  - Copy for Agents: copy mcp installation instruction for agents, for quick installation
+
+### technical requirements
+
+- ocr must be a queue (channel) to handle cases where cpu is too slow processing OCR for pictures
+- we will migrate completely to sqlite
+- filesystem still used, that is under pi0 data dir, a sqlite with WAL is used
+- under pi0 data dir, no longer use date level. now pictures uses <dataDir>/<app>/<ts>-<monitor-id>.png and will be deleted after ocred. If the app crashes with PNGs still queued, the next capture start runs a sweep
+- the sqlite will be password protected, auth using user's password. if non-present create new db
+- mcp auth token will be stored inside the sqlite
+- branch `backup-mcp-auth-secure-storage` has something you could learn from, but not just copy from it, think about our latest requirements
+
 ## milestone 3, 20260703-1
 
 ### functionality requirements
