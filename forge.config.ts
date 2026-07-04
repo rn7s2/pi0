@@ -36,6 +36,8 @@ const config: ForgeConfig = {
     plugins: [
         new AutoUnpackNativesPlugin({}),
         new WebpackPlugin({
+            // move the renderer dev server off the default 3000 to avoid collisions
+            port: 13000,
             // resolve default logger port (9000) collision
             loggerPort: 18123,
             mainConfig,
