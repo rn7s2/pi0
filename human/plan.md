@@ -19,8 +19,8 @@ do make the plan clean, short and easy to understand.
 - all settings wrapped inside a scrollable pane, and in the bottom a fixed row of Revert+Save button
 - revert and save button must have proper disabled status
 - mcp server instead of current "save" button, two buttons:
-  - Copy Token: copy token generated to clipboard
-  - Copy for Agents: copy mcp installation instruction for agents, for quick installation
+    - Copy Token: copy token generated to clipboard
+    - Copy for Agents: copy mcp installation instruction for agents, for quick installation
 
 ### technical requirements
 
