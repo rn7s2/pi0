@@ -16,7 +16,9 @@ use std::sync::{Mutex, OnceLock};
 use anyhow::{anyhow, bail, Context, Result};
 use rusqlite::{params, Connection, Row};
 
-use crate::context_store::{AppUsage, ContextPage, ContextRecord, OcrItem};
+use crate::context_store::{
+    AppUsage, ContextRecord, OcrItem, TimelineKind, TimelinePage, TimelineRecord,
+};
 use crate::writer::Record;
 
 /// The open, authenticated database plus the password it was unlocked with (kept
@@ -58,8 +60,7 @@ pub fn open(data_dir: &Path, password: &str) -> Result<bool> {
     std::fs::create_dir_all(data_dir)
         .with_context(|| format!("creating data dir {}", data_dir.display()))?;
 
-    let conn =
-        Connection::open(&path).with_context(|| format!("opening {}", path.display()))?;
+    let conn = Connection::open(&path).with_context(|| format!("opening {}", path.display()))?;
     // The key must be applied before any other access; SQLCipher derives the
     // encryption key from it via PBKDF2.
     conn.pragma_update(None, "key", password)
@@ -86,7 +87,9 @@ pub fn open(data_dir: &Path, password: &str) -> Result<bool> {
 /// Verifies `current` against the password the DB was unlocked with first.
 pub fn change_password(current: &str, new: &str) -> Result<()> {
     let mut guard = slot().lock().unwrap();
-    let db = guard.as_mut().ok_or_else(|| anyhow!("database is locked"))?;
+    let db = guard
+        .as_mut()
+        .ok_or_else(|| anyhow!("database is locked"))?;
     if db.password != current {
         bail!("incorrect current password");
     }
@@ -101,7 +104,9 @@ pub fn change_password(current: &str, new: &str) -> Result<()> {
 /// first call. Stable across restarts and password changes (it lives in `meta`).
 pub fn mcp_token() -> Result<String> {
     let guard = slot().lock().unwrap();
-    let db = guard.as_ref().ok_or_else(|| anyhow!("database is locked"))?;
+    let db = guard
+        .as_ref()
+        .ok_or_else(|| anyhow!("database is locked"))?;
     db.conn
         .execute(
             "INSERT OR IGNORE INTO meta(key, value) \
@@ -164,55 +169,77 @@ pub fn query_text(start_ms: i64, end_ms: i64) -> Result<Vec<Record>> {
     })
 }
 
-/// One page of OCR contexts within `[start_ms, end_ms]` (optionally filtered to
-/// one app, matched case-insensitively against sanitized *or* raw name), plus
-/// the total match count for pagination.
-pub fn query_contexts(
+/// One page of the merged activity timeline within `[start_ms, end_ms]` — OCR
+/// contexts and keystroke records interleaved in `ts` order — optionally filtered
+/// to one app (matched case-insensitively against sanitized *or* raw name), plus
+/// the combined total match count for pagination.
+///
+/// Both stores are read in a single `UNION ALL` with a shared projection so the
+/// `ORDER BY ts` / `LIMIT` / `OFFSET` apply to the merged stream. Each subquery
+/// pads the columns it lacks with `NULL` (`text` for contexts, `display`/`items`
+/// for keystrokes); `row_to_timeline` reads only the columns its `kind` populates.
+pub fn query_timeline(
     start_ms: i64,
     end_ms: i64,
     app: Option<&str>,
     offset: usize,
     limit: usize,
-) -> Result<ContextPage> {
+) -> Result<TimelinePage> {
     with_db(|db| {
         let (total, records) = match app {
             Some(app) => {
                 let app = app.to_lowercase();
                 let total: u32 = db.conn.query_row(
-                    "SELECT COUNT(*) FROM contexts WHERE ts BETWEEN ?1 AND ?2 \
-                     AND (lower(app) = ?3 OR lower(app_raw) = ?3)",
+                    "SELECT \
+                       (SELECT COUNT(*) FROM contexts \
+                          WHERE ts BETWEEN ?1 AND ?2 AND (lower(app) = ?3 OR lower(app_raw) = ?3)) \
+                     + (SELECT COUNT(*) FROM text_records \
+                          WHERE ts BETWEEN ?1 AND ?2 AND (lower(app) = ?3 OR lower(app_raw) = ?3))",
                     params![start_ms, end_ms, app],
                     |r| r.get(0),
                 )?;
                 let mut stmt = db.conn.prepare(
-                    "SELECT ts, app, app_raw, display, items FROM contexts \
-                     WHERE ts BETWEEN ?1 AND ?2 AND (lower(app) = ?3 OR lower(app_raw) = ?3) \
+                    "SELECT ts, app, app_raw, 'ocr' AS kind, display, items, NULL AS text \
+                       FROM contexts \
+                       WHERE ts BETWEEN ?1 AND ?2 AND (lower(app) = ?3 OR lower(app_raw) = ?3) \
+                     UNION ALL \
+                     SELECT ts, app, app_raw, 'keys' AS kind, NULL AS display, NULL AS items, text \
+                       FROM text_records \
+                       WHERE ts BETWEEN ?1 AND ?2 AND (lower(app) = ?3 OR lower(app_raw) = ?3) \
                      ORDER BY ts LIMIT ?4 OFFSET ?5",
                 )?;
                 let rows = stmt.query_map(
                     params![start_ms, end_ms, app, limit as i64, offset as i64],
-                    row_to_context,
+                    row_to_timeline,
                 )?;
                 (total, rows.collect::<rusqlite::Result<Vec<_>>>()?)
             }
             None => {
                 let total: u32 = db.conn.query_row(
-                    "SELECT COUNT(*) FROM contexts WHERE ts BETWEEN ?1 AND ?2",
+                    "SELECT \
+                       (SELECT COUNT(*) FROM contexts     WHERE ts BETWEEN ?1 AND ?2) \
+                     + (SELECT COUNT(*) FROM text_records WHERE ts BETWEEN ?1 AND ?2)",
                     params![start_ms, end_ms],
                     |r| r.get(0),
                 )?;
                 let mut stmt = db.conn.prepare(
-                    "SELECT ts, app, app_raw, display, items FROM contexts \
-                     WHERE ts BETWEEN ?1 AND ?2 ORDER BY ts LIMIT ?3 OFFSET ?4",
+                    "SELECT ts, app, app_raw, 'ocr' AS kind, display, items, NULL AS text \
+                       FROM contexts \
+                       WHERE ts BETWEEN ?1 AND ?2 \
+                     UNION ALL \
+                     SELECT ts, app, app_raw, 'keys' AS kind, NULL AS display, NULL AS items, text \
+                       FROM text_records \
+                       WHERE ts BETWEEN ?1 AND ?2 \
+                     ORDER BY ts LIMIT ?3 OFFSET ?4",
                 )?;
                 let rows = stmt.query_map(
                     params![start_ms, end_ms, limit as i64, offset as i64],
-                    row_to_context,
+                    row_to_timeline,
                 )?;
                 (total, rows.collect::<rusqlite::Result<Vec<_>>>()?)
             }
         };
-        Ok(ContextPage { total, records })
+        Ok(TimelinePage { total, records })
     })
 }
 
@@ -288,20 +315,38 @@ pub fn close() {
 /// Run `f` with the unlocked DB, or fail closed with "database is locked".
 fn with_db<T>(f: impl FnOnce(&Db) -> Result<T>) -> Result<T> {
     let guard = slot().lock().unwrap();
-    let db = guard.as_ref().ok_or_else(|| anyhow!("database is locked"))?;
+    let db = guard
+        .as_ref()
+        .ok_or_else(|| anyhow!("database is locked"))?;
     f(db)
 }
 
-/// Map a `contexts` row into a `ContextRecord`, tolerating a corrupt items blob.
-fn row_to_context(r: &Row) -> rusqlite::Result<ContextRecord> {
-    let items_json: String = r.get(4)?;
-    let items: Vec<OcrItem> = serde_json::from_str(&items_json).unwrap_or_default();
-    Ok(ContextRecord {
+/// Map a merged timeline row (see [`query_timeline`]) into a `TimelineRecord`.
+/// Columns: 0 ts, 1 app, 2 app_raw, 3 kind, 4 display, 5 items(JSON), 6 text.
+/// Only the columns the row's `kind` populates are read; a corrupt OCR items blob
+/// degrades to an empty item list rather than erroring.
+fn row_to_timeline(r: &Row) -> rusqlite::Result<TimelineRecord> {
+    let kind: String = r.get(3)?;
+    let (kind, display, items, text) = if kind == "ocr" {
+        let items_json: String = r.get(5)?;
+        let items: Vec<OcrItem> = serde_json::from_str(&items_json).unwrap_or_default();
+        (TimelineKind::Ocr, r.get::<_, Option<u32>>(4)?, items, None)
+    } else {
+        (
+            TimelineKind::Keys,
+            None,
+            Vec::new(),
+            r.get::<_, Option<String>>(6)?,
+        )
+    };
+    Ok(TimelineRecord {
         ts: r.get(0)?,
         app: r.get(1)?,
         app_raw: r.get(2)?,
-        display: r.get(3)?,
+        kind,
+        display,
         items,
+        text,
     })
 }
 
@@ -403,32 +448,40 @@ mod tests {
     }
 
     #[test]
-    fn contexts_paginate_and_apps_aggregate() {
+    fn timeline_merges_paginates_and_apps_aggregate() {
         with_fresh_db("pw", |_dir| {
             insert_context(&ctx(1000, "Chrome", &["hello", "world"])).unwrap();
             insert_context(&ctx(1010, "Chrome", &["again"])).unwrap();
             insert_context(&ctx(1020, "Lark", &["message"])).unwrap();
             insert_text_record(&rec(1005, "Chrome", "typed")).unwrap();
 
-            let page = query_contexts(0, 5000, None, 0, 2).unwrap();
-            assert_eq!(page.total, 3);
+            // Contexts and keystrokes interleave by ts in one paginated stream:
+            // ts 1000 ocr, 1005 keys, 1010 ocr, 1020 ocr.
+            let page = query_timeline(0, 5000, None, 0, 2).unwrap();
+            assert_eq!(page.total, 4);
             assert_eq!(page.records.len(), 2);
+            assert_eq!(page.records[0].kind, TimelineKind::Ocr);
             assert_eq!(page.records[0].items[0].text, "hello");
+            assert_eq!(page.records[1].kind, TimelineKind::Keys);
+            assert_eq!(page.records[1].text.as_deref(), Some("typed"));
 
-            let page2 = query_contexts(0, 5000, None, 2, 2).unwrap();
-            assert_eq!(page2.records.len(), 1);
-            assert_eq!(page2.records[0].app, "Lark");
+            let page2 = query_timeline(0, 5000, None, 2, 2).unwrap();
+            assert_eq!(page2.records.len(), 2);
+            assert_eq!(page2.records[0].kind, TimelineKind::Ocr); // ts 1010 Chrome
+            assert_eq!(page2.records[1].app, "Lark"); // ts 1020
 
-            // App filter is case-insensitive.
-            let lark = query_contexts(0, 5000, Some("LARK"), 0, 10).unwrap();
+            // App filter is case-insensitive and spans both stores.
+            let chrome = query_timeline(0, 5000, Some("CHROME"), 0, 10).unwrap();
+            assert_eq!(chrome.total, 3, "2 contexts + 1 keystroke record");
+            let lark = query_timeline(0, 5000, Some("LARK"), 0, 10).unwrap();
             assert_eq!(lark.total, 1);
 
             let apps = query_apps(0, 5000).unwrap();
             assert_eq!(apps.len(), 2);
             assert_eq!(apps[0].app, "Lark", "most recent first");
-            let chrome = apps.iter().find(|a| a.app == "Chrome").unwrap();
-            assert_eq!(chrome.context_records, 2);
-            assert_eq!(chrome.text_records, 1);
+            let chrome_usage = apps.iter().find(|a| a.app == "Chrome").unwrap();
+            assert_eq!(chrome_usage.context_records, 2);
+            assert_eq!(chrome_usage.text_records, 1);
         });
     }
 

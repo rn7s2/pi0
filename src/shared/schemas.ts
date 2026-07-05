@@ -75,6 +75,35 @@ export type ContextRecord = z.infer<typeof ContextRecordSchema>;
 
 export const ContextRecordArraySchema = z.array(ContextRecordSchema);
 
+/**
+ * One entry in the merged activity timeline (mirrors the Rust `TimelineRecord`).
+ * `kind` discriminates the payload: `"ocr"` entries carry `display` + `items`
+ * (what the user saw), `"keys"` entries carry `text` (what the user typed). The
+ * inapplicable fields are absent/null, so they're validated as nullish here and
+ * narrowed by the MCP server before being handed to agents.
+ */
+export const TimelineRecordSchema = z.object({
+    /** Epoch milliseconds — screenshot instant (ocr) or keystroke buffer start (keys). */
+    ts: z.number(),
+    app: z.string(),
+    appRaw: z.string(),
+    kind: z.enum(['ocr', 'keys']),
+    /** OCR only: display index (0 = main). */
+    display: z.number().nullish(),
+    /** OCR only: recognised text lines with normalised coordinates. */
+    items: z.array(OcrItemSchema).nullish(),
+    /** Keystrokes only: the raw captured text for this buffer. */
+    text: z.string().nullish(),
+});
+export type TimelineRecord = z.infer<typeof TimelineRecordSchema>;
+
+/** One page of timeline records plus the range's total match count. */
+export const TimelinePageSchema = z.object({
+    total: z.number(),
+    records: z.array(TimelineRecordSchema),
+});
+export type TimelinePage = z.infer<typeof TimelinePageSchema>;
+
 /** Per-app usage aggregate for a time range (mirrors the Rust `AppUsage`). */
 export const AppUsageSchema = z.object({
     app: z.string(),

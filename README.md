@@ -12,12 +12,15 @@ Everything stays on your machine. Screenshots are OCR'd on-device and then **del
 
 ## Quick install (pre-built)
 
-Grab the latest pre-built app instead of building from source:
+> ⚠️ If pi0 is already running, **quit it first** before replacing the app.
+
+Copy-n-paste in your terminal to grab the latest pre-built app:
 
 ```bash
-# download, unzip, and move to /Applications
-curl -L -o pi0.zip https://releases.ruiqilei.com/pi0/pi0-darwin-arm64-1.0.0.zip
+# download, unzip, remove any existing install, and move to /Applications
+curl -L -o pi0.zip https://releases.ruiqilei.com/pi0/pi0-darwin-arm64-latest.zip
 unzip pi0.zip
+rm -rf /Applications/pi0.app
 mv pi0.app /Applications/
 
 # the build is ad-hoc signed, so clear quarantine and re-sign locally

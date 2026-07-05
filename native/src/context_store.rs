@@ -45,8 +45,37 @@ pub struct AppUsage {
     pub context_records: u32,
 }
 
-/// A page of context records: the range's total match count plus one slice.
-pub struct ContextPage {
+/// Which store a [`TimelineRecord`] came from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TimelineKind {
+    /// An OCR screen context — carries `display` + `items`.
+    Ocr,
+    /// A keystroke record — carries `text`.
+    Keys,
+}
+
+/// One entry in the merged activity timeline: either an OCR screen context or a
+/// keystroke record, discriminated by [`TimelineRecord::kind`]. Only that kind's
+/// fields are populated (`display`/`items` for OCR, `text` for keystrokes).
+#[derive(Debug, Clone)]
+pub struct TimelineRecord {
+    /// Epoch milliseconds (screenshot instant for OCR, buffer-start for keys).
+    pub ts: i64,
+    /// Sanitized, folder-safe app name.
+    pub app: String,
+    /// Original `localizedName` of the app.
+    pub app_raw: String,
+    pub kind: TimelineKind,
+    /// OCR only: display index the shot came from (0 = main display).
+    pub display: Option<u32>,
+    /// OCR only: recognised text lines (empty for keystroke records).
+    pub items: Vec<OcrItem>,
+    /// Keystrokes only: the raw captured text for this buffer.
+    pub text: Option<String>,
+}
+
+/// A page of timeline records: the range's total match count plus one slice.
+pub struct TimelinePage {
     pub total: u32,
-    pub records: Vec<ContextRecord>,
+    pub records: Vec<TimelineRecord>,
 }

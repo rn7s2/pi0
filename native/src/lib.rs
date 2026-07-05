@@ -183,8 +183,7 @@ pub fn is_db_open() -> bool {
 /// was unlocked with, then re-encrypts in place.
 #[napi]
 pub fn change_password(current: String, new_password: String) -> Result<()> {
-    db::change_password(&current, &new_password)
-        .map_err(|e| Error::from_reason(format!("{e:#}")))
+    db::change_password(&current, &new_password).map_err(|e| Error::from_reason(format!("{e:#}")))
 }
 
 /// The MCP access token (minted and stored on first call). Requires an unlocked DB.
@@ -266,8 +265,7 @@ impl Task for QueryTask {
     type JsValue = Vec<TextRecord>;
 
     fn compute(&mut self) -> Result<Self::Output> {
-        db::query_text(self.start_ms, self.end_ms)
-            .map_err(|e| Error::from_reason(format!("{e:#}")))
+        db::query_text(self.start_ms, self.end_ms).map_err(|e| Error::from_reason(format!("{e:#}")))
     }
 
     fn resolve(&mut self, _env: Env, output: Self::Output) -> Result<Self::JsValue> {
@@ -284,7 +282,7 @@ pub fn query_text(params: QueryParams) -> AsyncTask<QueryTask> {
     })
 }
 
-// ---- OCR context queries (powers the MCP server) ---------------------------
+// ---- activity timeline queries (powers the MCP server) ---------------------
 
 /// One OCR'd text line; coordinates are normalised to `[0, 1]` relative to the
 /// captured display (x/y = top-left of the box, w/h = its size).
@@ -299,37 +297,54 @@ pub struct OcrItem {
     pub h: f64,
 }
 
-/// One screenshot's OCR context (maps to zod `ContextRecordSchema`).
+/// One entry in the merged activity timeline (maps to zod `TimelineRecordSchema`).
+/// `kind` is `"ocr"` or `"keys"`; only that kind's fields are populated.
 #[napi(object)]
-pub struct ContextRecord {
-    /// Epoch milliseconds the screenshot was taken.
+pub struct TimelineRecord {
+    /// Epoch milliseconds — the screenshot instant (OCR) or buffer start (keys).
     pub ts: f64,
     pub app: String,
     pub app_raw: String,
-    /// Display index the shot came from (0 = main display).
-    pub display: u32,
-    pub items: Vec<OcrItem>,
+    /// `"ocr"` (screen context) or `"keys"` (keystroke record).
+    pub kind: String,
+    /// OCR only: display index the shot came from (0 = main display).
+    pub display: Option<u32>,
+    /// OCR only: recognised text lines with normalised coordinates.
+    pub items: Option<Vec<OcrItem>>,
+    /// Keystrokes only: the raw captured text for this buffer.
+    pub text: Option<String>,
 }
 
-impl From<context_store::ContextRecord> for ContextRecord {
-    fn from(r: context_store::ContextRecord) -> Self {
+impl From<context_store::TimelineRecord> for TimelineRecord {
+    fn from(r: context_store::TimelineRecord) -> Self {
+        use context_store::TimelineKind;
+        let (kind, items) = match r.kind {
+            TimelineKind::Ocr => (
+                "ocr".to_string(),
+                Some(
+                    r.items
+                        .into_iter()
+                        .map(|i| OcrItem {
+                            text: i.text,
+                            score: i.score,
+                            x: i.x,
+                            y: i.y,
+                            w: i.w,
+                            h: i.h,
+                        })
+                        .collect(),
+                ),
+            ),
+            TimelineKind::Keys => ("keys".to_string(), None),
+        };
         Self {
             ts: r.ts as f64,
             app: r.app,
             app_raw: r.app_raw,
+            kind,
             display: r.display,
-            items: r
-                .items
-                .into_iter()
-                .map(|i| OcrItem {
-                    text: i.text,
-                    score: i.score,
-                    x: i.x,
-                    y: i.y,
-                    w: i.w,
-                    h: i.h,
-                })
-                .collect(),
+            items,
+            text: r.text,
         }
     }
 }
@@ -347,24 +362,24 @@ pub struct ContextQueryParams {
     pub limit: u32,
 }
 
-/// One page of context records plus the range's total match count.
+/// One page of timeline records plus the range's total match count.
 #[napi(object)]
-pub struct ContextPage {
+pub struct TimelinePage {
     pub total: u32,
-    pub records: Vec<ContextRecord>,
+    pub records: Vec<TimelineRecord>,
 }
 
-/// Async paginated context query against the store. Runs on a libuv worker.
-pub struct ContextsQueryTask {
+/// Async paginated timeline query against the store. Runs on a libuv worker.
+pub struct TimelineQueryTask {
     params: ContextQueryParams,
 }
 
-impl Task for ContextsQueryTask {
-    type Output = context_store::ContextPage;
-    type JsValue = ContextPage;
+impl Task for TimelineQueryTask {
+    type Output = context_store::TimelinePage;
+    type JsValue = TimelinePage;
 
     fn compute(&mut self) -> Result<Self::Output> {
-        db::query_contexts(
+        db::query_timeline(
             self.params.start_ms as i64,
             self.params.end_ms as i64,
             self.params.app.as_deref(),
@@ -375,22 +390,23 @@ impl Task for ContextsQueryTask {
     }
 
     fn resolve(&mut self, _env: Env, output: Self::Output) -> Result<Self::JsValue> {
-        Ok(ContextPage {
+        Ok(TimelinePage {
             total: output.total,
             records: output
                 .records
                 .into_iter()
-                .map(ContextRecord::from)
+                .map(TimelineRecord::from)
                 .collect(),
         })
     }
 }
 
-/// Query OCR contexts within `[startMs, endMs]`, optionally filtered by app,
-/// returning the `[offset, offset + limit)` page plus the total match count.
+/// Query the merged activity timeline (OCR contexts + keystroke records) within
+/// `[startMs, endMs]`, optionally filtered by app, returning the
+/// `[offset, offset + limit)` page plus the total match count.
 #[napi]
-pub fn query_contexts(params: ContextQueryParams) -> AsyncTask<ContextsQueryTask> {
-    AsyncTask::new(ContextsQueryTask { params })
+pub fn query_timeline(params: ContextQueryParams) -> AsyncTask<TimelineQueryTask> {
+    AsyncTask::new(TimelineQueryTask { params })
 }
 
 /// Per-app usage aggregate over a time range (maps to zod `AppUsageSchema`).
@@ -417,8 +433,7 @@ impl Task for AppsQueryTask {
     type JsValue = Vec<AppUsage>;
 
     fn compute(&mut self) -> Result<Self::Output> {
-        db::query_apps(self.start_ms, self.end_ms)
-            .map_err(|e| Error::from_reason(format!("{e:#}")))
+        db::query_apps(self.start_ms, self.end_ms).map_err(|e| Error::from_reason(format!("{e:#}")))
     }
 
     fn resolve(&mut self, _env: Env, output: Self::Output) -> Result<Self::JsValue> {

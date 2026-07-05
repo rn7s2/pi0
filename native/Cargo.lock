@@ -1471,7 +1471,7 @@ checksum = "35fb2e5f958ec131621fdd531e9fc186ed768cbe395337403ae56c17a74c68ec"
 
 [[package]]
 name = "pi0-native"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "anyhow",
  "arc-swap",

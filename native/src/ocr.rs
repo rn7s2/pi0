@@ -263,7 +263,7 @@ mod tests {
 
         assert!(!png.exists(), "picture must be deleted after OCR");
 
-        let page = db::query_contexts(ts - 1, ts + 1, Some("TestApp"), 0, 10).unwrap();
+        let page = db::query_timeline(ts - 1, ts + 1, Some("TestApp"), 0, 10).unwrap();
         let record = &page.records[0];
         assert_eq!(record.ts, ts);
         assert!(!record.items.is_empty(), "expected recognised text lines");
