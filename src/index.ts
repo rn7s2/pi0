@@ -63,7 +63,9 @@ function bootstrap(): void {
     let mcp: McpHandle | null = null;
     // The MCP bearer token, read from the encrypted store once it's unlocked.
     let mcpToken: string | null = null;
-    let snapshotTimer: ReturnType<typeof setInterval> | null = null;
+    // Self-rescheduling capture timer (setTimeout, not setInterval): each tick
+    // recomputes the delay from current activity, so the cadence adapts.
+    let snapshotTimer: ReturnType<typeof setTimeout> | null = null;
     // Distinguishes an explicit quit from a main-window close (which hides to tray).
     let isQuitting = false;
     // Debounce so a tray click that blurs (and hides) the panel doesn't reopen it.
@@ -82,18 +84,30 @@ function bootstrap(): void {
 
     const clearTimer = (): void => {
         if (snapshotTimer) {
-            clearInterval(snapshotTimer);
+            clearTimeout(snapshotTimer);
             snapshotTimer = null;
         }
     };
 
+    // Whether the user counts as active right now: some input (keystroke or mouse
+    // movement, tracked in the Rust addon) within the idle-timeout window. Older
+    // input — or none yet (lastActivityMs === 0) — means idle.
+    const isActive = (s: Settings): boolean => {
+        const last = native.lastActivityMs();
+        return last > 0 && Date.now() - last < s.idleTimeoutMs;
+    };
+
     // Screenshots are mandatory (they feed the OCR context store): the timer
-    // always runs while capture is on.
-    const restartTimer = (): void => {
+    // always runs while capture is on. Each tick captures, then reschedules the
+    // next one at the active or idle interval depending on recent activity —
+    // coarser when idle to save power, CPU, and database size.
+    const scheduleNextCapture = (): void => {
         clearTimer();
-        if (settings && native.isRunning()) {
-            snapshotTimer = setInterval(() => void captureNow(), settings.intervalMs);
-        }
+        if (!settings || !native.isRunning()) return;
+        const delay = isActive(settings) ? settings.activeIntervalMs : settings.idleIntervalMs;
+        snapshotTimer = setTimeout(() => {
+            void captureNow().finally(scheduleNextCapture);
+        }, delay);
     };
 
     // Push the current running state to every live renderer (main + panel) so the
@@ -116,11 +130,8 @@ function bootstrap(): void {
             return { running: false, error: 'locked' };
         }
         try {
-            native.start({
-                dataDir: settings.dataDir,
-                intervalMs: settings.intervalMs,
-            });
-            restartTimer();
+            native.start({ dataDir: settings.dataDir });
+            scheduleNextCapture();
             broadcastRunning();
             return { running: true };
         } catch (err) {
@@ -317,6 +328,7 @@ function bootstrap(): void {
 
     const registerIpc = (): void => {
         ipcMain.handle(IPC.getSettings, () => settings);
+        ipcMain.handle(IPC.getAppVersion, () => app.getVersion());
 
         ipcMain.handle(IPC.saveSettings, async (_event, raw) => {
             // Renderer is untrusted; keep dataDir under our control and validate.
@@ -327,7 +339,8 @@ function bootstrap(): void {
             });
             settings = next;
             if (native.isRunning()) {
-                restartTimer();
+                // Pick up new interval/idle-timeout values on the next tick.
+                scheduleNextCapture();
             }
             if (next.mcpPort !== previousPort) {
                 await restartMcp();

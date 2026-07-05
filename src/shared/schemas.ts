@@ -14,6 +14,12 @@ export const DEFAULT_MCP_PORT = 31415;
 export const ThemeSchema = z.enum(['system', 'light', 'dark']);
 export type Theme = z.infer<typeof ThemeSchema>;
 
+/** Bounds shared by all three interval settings (1s – 1h), in milliseconds. */
+const INTERVAL_MIN_MS = 1_000;
+const INTERVAL_MAX_MS = 3_600_000;
+const intervalMs = (fallback: number) =>
+    z.number().int().min(INTERVAL_MIN_MS).max(INTERVAL_MAX_MS).default(fallback);
+
 /** User settings, persisted to `<userData>/settings.json`. */
 export const SettingsSchema = z.object({
     /** Absolute directory where recorded data is written. */
@@ -21,11 +27,24 @@ export const SettingsSchema = z.object({
     /** Appearance: follow the system, or pin light/dark. */
     theme: ThemeSchema.default('system'),
     /**
-     * Screenshot interval in milliseconds (1s – 1h). Screenshots are mandatory
-     * in M3 — they feed the on-device OCR that produces the context store — so
-     * there is no master switch anymore, only the cadence.
+     * Screenshot cadence while the user is *active* (input within the idle
+     * timeout window). Screenshots are mandatory — they feed the on-device OCR
+     * that produces the context store — so there is no master switch, only the
+     * adaptive cadence: the tighter interval used when the user is at the machine.
      */
-    intervalMs: z.number().int().min(1000).max(3_600_000).default(8_000),
+    activeIntervalMs: intervalMs(8_000),
+    /**
+     * Screenshot cadence while the user is *idle* (no keystroke or mouse
+     * movement within the idle timeout). Coarser than the active interval to cut
+     * power draw, CPU, and database growth when nothing is changing on screen.
+     */
+    idleIntervalMs: intervalMs(48_000),
+    /**
+     * How long after the last input (keystroke or mouse movement) the user is
+     * still considered active. Past this window with no input, capture drops to
+     * the idle interval.
+     */
+    idleTimeoutMs: intervalMs(180_000),
     /** Localhost port the MCP server (Streamable HTTP) listens on. */
     mcpPort: z.number().int().min(1024).max(65535).default(DEFAULT_MCP_PORT),
 });
@@ -33,7 +52,12 @@ export type Settings = z.infer<typeof SettingsSchema>;
 
 /** One keystroke record (mirrors the Rust `TextRecord`). */
 export const TextRecordSchema = z.object({
+    /** Epoch milliseconds — the UTC instant. */
     ts: z.number(),
+    /** Local wall-clock at `ts`, ISO-8601 without offset. */
+    localTime: z.string(),
+    /** IANA timezone name the record was captured in. */
+    tzName: z.string(),
     app: z.string(),
     appRaw: z.string(),
     text: z.string(),
@@ -85,6 +109,10 @@ export const ContextRecordArraySchema = z.array(ContextRecordSchema);
 export const TimelineRecordSchema = z.object({
     /** Epoch milliseconds — screenshot instant (ocr) or keystroke buffer start (keys). */
     ts: z.number(),
+    /** Local wall-clock at `ts`, ISO-8601 without offset. */
+    localTime: z.string(),
+    /** IANA timezone name the record was captured in. */
+    tzName: z.string(),
     app: z.string(),
     appRaw: z.string(),
     kind: z.enum(['ocr', 'keys']),

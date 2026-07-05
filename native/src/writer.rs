@@ -10,6 +10,14 @@ use serde::{Deserialize, Serialize};
 pub struct Record {
     /// Epoch milliseconds (UTC instant) the buffered chunk began.
     pub ts: i64,
+    /// Local wall-clock at `ts`, ISO-8601 without offset (e.g.
+    /// `2026-07-05T14:30:00.123`). Paired with `tz_name` so the local time
+    /// stays interpretable after the user moves across timezones.
+    #[serde(rename = "localTime")]
+    pub local_time: String,
+    /// IANA timezone name the chunk was recorded in (e.g. `Asia/Shanghai`).
+    #[serde(rename = "tzName")]
+    pub tz_name: String,
     /// Sanitized, folder-safe app name.
     pub app: String,
     /// Original `localizedName` of the app.

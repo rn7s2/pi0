@@ -22,8 +22,14 @@ pub struct OcrItem {
 /// One screenshot's OCR context. Matches the TypeScript `ContextRecordSchema`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ContextRecord {
-    /// Epoch milliseconds the screenshot was taken.
+    /// Epoch milliseconds (UTC instant) the screenshot was taken.
     pub ts: i64,
+    /// Local wall-clock at `ts`, ISO-8601 without offset. Paired with `tz_name`.
+    #[serde(rename = "localTime")]
+    pub local_time: String,
+    /// IANA timezone name the shot was captured in (e.g. `Asia/Shanghai`).
+    #[serde(rename = "tzName")]
+    pub tz_name: String,
     /// Sanitized, folder-safe app name.
     pub app: String,
     /// Original `localizedName` of the app.
@@ -61,6 +67,10 @@ pub enum TimelineKind {
 pub struct TimelineRecord {
     /// Epoch milliseconds (screenshot instant for OCR, buffer-start for keys).
     pub ts: i64,
+    /// Local wall-clock at `ts`, ISO-8601 without offset.
+    pub local_time: String,
+    /// IANA timezone name the record was captured in.
+    pub tz_name: String,
     /// Sanitized, folder-safe app name.
     pub app: String,
     /// Original `localizedName` of the app.

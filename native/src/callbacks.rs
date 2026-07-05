@@ -9,12 +9,17 @@ use std::ptr::NonNull;
 
 use objc2_io_kit::{IOHIDValue, IOReturn};
 
+use crate::clock;
 use crate::keymap::{self, KeyKind};
-use crate::paths;
 use crate::state::HidState;
 
 /// HID element usage page for keyboard/keypad keys.
 const KEYBOARD_USAGE_PAGE: u32 = 0x07;
+/// HID Generic Desktop usage page — carries mouse/pointer motion (X/Y).
+const GENERIC_DESKTOP_PAGE: u32 = 0x01;
+/// Generic Desktop usages for pointer motion deltas.
+const USAGE_X: u32 = 0x30;
+const USAGE_Y: u32 = 0x31;
 
 /// Recover the `HidState` from the C `context` pointer.
 ///
@@ -42,7 +47,20 @@ pub unsafe extern "C-unwind" fn input_value(
 
 fn handle_input_value(state: &HidState, value: &IOHIDValue) {
     let element = value.element();
-    if element.usage_page() != KEYBOARD_USAGE_PAGE {
+    let usage_page = element.usage_page();
+
+    // Mouse/pointer movement: a non-zero relative delta on the Generic Desktop
+    // X or Y axis. Counts as activity (keeps capture in the active cadence) but
+    // is never recorded — only the last-activity clock is bumped.
+    if usage_page == GENERIC_DESKTOP_PAGE {
+        let usage = element.usage();
+        if (usage == USAGE_X || usage == USAGE_Y) && value.integer_value() != 0 {
+            state.mark_activity(clock::now_ms());
+        }
+        return;
+    }
+
+    if usage_page != KEYBOARD_USAGE_PAGE {
         return;
     }
     let scancode = element.usage();
@@ -61,8 +79,11 @@ fn handle_input_value(state: &HidState, value: &IOHIDValue) {
     };
 
     if down {
-        // Rotate the buffer to the current app / time window before appending.
-        state.rotate_if_needed(paths::now_ms());
+        // A keystroke is activity; bump the clock, then rotate the buffer to the
+        // current app / time window before appending.
+        let now = clock::now_ms();
+        state.mark_activity(now);
+        state.rotate_if_needed(now);
         match entry.kind {
             KeyKind::CapsLock => state.toggle_capslock(),
             KeyKind::Modifier => state.append_text(&format!("{}(", entry.base)),

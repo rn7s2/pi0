@@ -1,6 +1,6 @@
 {
     "name": "@pi0/native",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "description": "pi0 native addon (keylogger, screenshots, data store)",
     "main": "index.js",
     "types": "index.d.ts",

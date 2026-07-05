@@ -4,6 +4,22 @@ let's design a personal intelligence workbench. I call this pi0 for now. It coul
 
 do make the plan clean, short and easy to understand.
 
+## milestone 5, 20260705-1
+
+### functionality requirements
+
+- adaptive interval for screen capture and ocr. reduce power consumption, database size and cpu usage, enhance query speed and accuracy
+- in settings - capture settings, "Screenshot interval" becomes two settings: active screenshot interval and idle screenshot interval
+- active interval default 8s, idle default 48s
+- in settings - capture settings, add a 'idle timeout', default 180s
+
+### technical requirements
+
+- extend rust addon to detect cursor/mouse/pointer movement delta events
+- if have keystrokes/mouse movements in last 'idle timeout' window, we take it as 'active' and use active interval. otherwise use idle interval
+- refine all time or timestamp related stuff, both in frontend, nodejs process and in rust addon, that events must also stamps timezone of the event. that is in db, local time (without timezone) + utc time + timezone name. 3 cols must present in the db, or we will run into issues when user moves across timezones
+- agents and user-facing stuff should keep use local timezone, and make this interface behaviour explicit in all descriptions of MCP
+
 ## milestone 4, 20260704-1
 
 ### functionality requirements

@@ -33,6 +33,10 @@ pub struct PendingShot {
     pub png_path: PathBuf,
     /// Epoch ms the screenshot was taken (shared across a multi-display set).
     pub ts: i64,
+    /// Local wall-clock at `ts`, ISO-8601 without offset.
+    pub local_time: String,
+    /// IANA timezone name the shot was captured in.
+    pub tz_name: String,
     /// Sanitized (folder-safe) app name.
     pub app: String,
     /// Original localizedName of the app.
@@ -164,6 +168,8 @@ fn contextualise(engine: &OcrEngine, shot: &PendingShot) -> Result<()> {
     // nothing readable on screen" is context too.
     db::insert_context(&ContextRecord {
         ts: shot.ts,
+        local_time: shot.local_time.clone(),
+        tz_name: shot.tz_name.clone(),
         app: shot.app.clone(),
         app_raw: shot.app_raw.clone(),
         display: shot.display,
@@ -196,9 +202,15 @@ fn find_stray_shots(data_dir: &Path) -> Vec<PendingShot> {
             let Some((ts, display)) = parse_shot_stem(stem) else {
                 continue;
             };
+            // The filename preserves ts but not the local time / zone; reconstruct
+            // them from ts in the current zone (a recent pre-crash shot's best
+            // approximation — see clock::stamp_from_ms).
+            let stamp = crate::clock::stamp_from_ms(ts);
             out.push(PendingShot {
                 png_path: path,
                 ts,
+                local_time: stamp.local_time,
+                tz_name: stamp.tz_name,
                 app: app.clone(),
                 app_raw: app.clone(),
                 display,
@@ -243,7 +255,8 @@ mod tests {
         let _ = std::fs::remove_dir_all(&data_dir);
         db::open(&data_dir, "test-pw").expect("open db");
 
-        let ts = crate::paths::now_ms();
+        let stamp = crate::clock::stamp();
+        let ts = stamp.ts;
         let app_dir = crate::paths::app_dir(&data_dir, "TestApp");
         std::fs::create_dir_all(&app_dir).unwrap();
         let png = crate::paths::shot_path(&data_dir, "TestApp", ts, 0);
@@ -255,6 +268,8 @@ mod tests {
             &PendingShot {
                 png_path: png.clone(),
                 ts,
+                local_time: stamp.local_time,
+                tz_name: stamp.tz_name,
                 app: "TestApp".to_string(),
                 app_raw: "TestApp".to_string(),
                 display: 0,

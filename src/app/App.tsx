@@ -10,8 +10,8 @@ import { SettingsView } from './SettingsView';
 type Phase = 'checking' | 'password' | 'guard' | 'ready';
 
 // The main window gates on the encrypted store first (the password prompt), then
-// the macOS permission guard, then the settings form. Recording is controlled
-// from the tray float panel.
+// the macOS permission guard, then the settings form. Recording can be toggled
+// from the tray float panel or from Settings → Capture settings.
 export function App() {
     const [phase, setPhase] = useState<Phase>('checking');
 

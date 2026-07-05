@@ -8,10 +8,12 @@
 //!   (`RefCell`/`Cell`), exactly like the standalone reference.
 
 use std::cell::{Cell, RefCell};
+use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::Arc;
 
 use arc_swap::ArcSwap;
 
+use crate::clock::{self, Stamp};
 use crate::db;
 use crate::writer::Record;
 
@@ -35,15 +37,23 @@ impl Default for AppName {
     }
 }
 
-/// Cross-thread state. Written by the main thread, read by the HID thread.
+/// Cross-thread state. Written by the main/HID threads, read by both. The
+/// frontmost-app cell is written by the main-thread observer; the last-activity
+/// clock is written by the HID thread (on every keystroke and mouse movement)
+/// and read by the JS main thread to choose the adaptive capture interval.
 pub struct Shared {
     app_name: ArcSwap<AppName>,
+    last_activity_ms: AtomicI64,
 }
 
 impl Shared {
     pub fn new() -> Arc<Self> {
         Arc::new(Self {
             app_name: ArcSwap::from_pointee(AppName::default()),
+            // Seed with "now" so capture starts in the active cadence: the user
+            // just interacted with the app to start it, so treat that as recent
+            // activity rather than forcing the idle interval for the first window.
+            last_activity_ms: AtomicI64::new(clock::now_ms()),
         })
     }
 
@@ -54,13 +64,27 @@ impl Shared {
     pub fn set_app(&self, name: AppName) {
         self.app_name.store(Arc::new(name));
     }
+
+    /// Record that input (keystroke or mouse movement) happened at `ms`. Called
+    /// from the HID thread; a relaxed store is enough — the JS reader only needs
+    /// a recent-enough value to decide active vs idle, not exact ordering.
+    pub fn mark_activity(&self, ms: i64) {
+        self.last_activity_ms.store(ms, Ordering::Relaxed);
+    }
+
+    /// Epoch ms of the most recent input activity (or the engine start instant if
+    /// none yet). The JS timer compares this against its idle-timeout window.
+    pub fn last_activity_ms(&self) -> i64 {
+        self.last_activity_ms.load(Ordering::Relaxed)
+    }
 }
 
-/// An open keystroke buffer for one app, tagged with its start instant.
+/// An open keystroke buffer for one app, tagged with the stamp of its start
+/// instant (UTC ms + local wall-clock + zone name, captured once on rotation).
 struct Buffer {
     app: AppName,
     text: String,
-    started_ms: i64,
+    stamp: Stamp,
 }
 
 /// HID-thread-only state. Reconstructed from the C callback `context` pointer;
@@ -88,8 +112,16 @@ impl HidState {
         self.capslock.set(!self.capslock.get());
     }
 
+    /// Record input activity (keystroke or mouse movement) at `now_ms` on the
+    /// shared clock the JS side reads to choose the adaptive capture interval.
+    pub fn mark_activity(&self, now_ms: i64) {
+        self.shared.mark_activity(now_ms);
+    }
+
     /// Ensure the open buffer targets the current app and time window, flushing
-    /// and rotating when the app changed or the window elapsed.
+    /// and rotating when the app changed or the window elapsed. `now_ms` is the
+    /// cheap clock read used for the rotation *decision*; a fresh full [`Stamp`]
+    /// (local time + zone) is resolved only when a new buffer is actually opened.
     pub fn rotate_if_needed(&self, now_ms: i64) {
         let current = self.shared.current_app();
         let rotate = {
@@ -97,8 +129,7 @@ impl HidState {
             match buf.as_ref() {
                 None => true,
                 Some(b) => {
-                    b.app.sanitized != current.sanitized
-                        || now_ms - b.started_ms >= FLUSH_INTERVAL_MS
+                    b.app.sanitized != current.sanitized || now_ms - b.stamp.ts >= FLUSH_INTERVAL_MS
                 }
             }
         };
@@ -109,7 +140,7 @@ impl HidState {
             *self.buffer.borrow_mut() = Some(Buffer {
                 app: (*current).clone(),
                 text: String::new(),
-                started_ms: now_ms,
+                stamp: clock::stamp(),
             });
         }
     }
@@ -133,7 +164,9 @@ impl HidState {
             return;
         }
         let record = Record {
-            ts: buffer.started_ms,
+            ts: buffer.stamp.ts,
+            local_time: buffer.stamp.local_time,
+            tz_name: buffer.stamp.tz_name,
             app: buffer.app.sanitized,
             app_raw: buffer.app.raw,
             text: buffer.text,

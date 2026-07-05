@@ -17,8 +17,9 @@ use objc2_core_foundation::{
     CFString,
 };
 use objc2_io_kit::{
-    kHIDPage_GenericDesktop, kHIDUsage_GD_Keyboard, kHIDUsage_GD_Keypad, kIOHIDDeviceUsageKey,
-    kIOHIDDeviceUsagePageKey, kIOHIDOptionsTypeNone, IOHIDManager,
+    kHIDPage_GenericDesktop, kHIDUsage_GD_Keyboard, kHIDUsage_GD_Keypad, kHIDUsage_GD_Mouse,
+    kHIDUsage_GD_Pointer, kIOHIDDeviceUsageKey, kIOHIDDeviceUsagePageKey, kIOHIDOptionsTypeNone,
+    IOHIDManager,
 };
 
 use crate::callbacks;
@@ -106,14 +107,19 @@ fn hid_thread_main(
 
     let manager = IOHIDManager::new(None, kIOHIDOptionsTypeNone);
 
-    // Match Generic-Desktop keyboards and keypads.
+    // Match Generic-Desktop keyboards/keypads (keystrokes) plus mice/pointers
+    // (movement deltas → activity signal for the adaptive capture interval).
     let matches = [
         matching_dict(kHIDPage_GenericDesktop, kHIDUsage_GD_Keyboard),
         matching_dict(kHIDPage_GenericDesktop, kHIDUsage_GD_Keypad),
+        matching_dict(kHIDPage_GenericDesktop, kHIDUsage_GD_Mouse),
+        matching_dict(kHIDPage_GenericDesktop, kHIDUsage_GD_Pointer),
     ];
-    let mut match_ptrs: [*const c_void; 2] = [
+    let mut match_ptrs: [*const c_void; 4] = [
         (&*matches[0] as *const CFDictionary).cast(),
         (&*matches[1] as *const CFDictionary).cast(),
+        (&*matches[2] as *const CFDictionary).cast(),
+        (&*matches[3] as *const CFDictionary).cast(),
     ];
     let match_array = unsafe {
         CFArray::new(

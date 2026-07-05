@@ -8,6 +8,7 @@ import { IPC, Pi0Api } from './shared/ipc';
 const api: Pi0Api = {
     getSettings: () => ipcRenderer.invoke(IPC.getSettings),
     saveSettings: (settings) => ipcRenderer.invoke(IPC.saveSettings, settings),
+    getAppVersion: () => ipcRenderer.invoke(IPC.getAppVersion),
     startCapture: () => ipcRenderer.invoke(IPC.startCapture),
     stopCapture: () => ipcRenderer.invoke(IPC.stopCapture),
     isRunning: () => ipcRenderer.invoke(IPC.isRunning),

@@ -127,8 +127,16 @@ pub fn insert_text_record(rec: &Record) -> Result<()> {
     with_db(|db| {
         db.conn
             .execute(
-                "INSERT INTO text_records(ts, app, app_raw, text) VALUES (?1, ?2, ?3, ?4)",
-                params![rec.ts, rec.app, rec.app_raw, rec.text],
+                "INSERT INTO text_records(ts, local_time, tz_name, app, app_raw, text) \
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                params![
+                    rec.ts,
+                    rec.local_time,
+                    rec.tz_name,
+                    rec.app,
+                    rec.app_raw,
+                    rec.text
+                ],
             )
             .context("inserting text record")?;
         Ok(())
@@ -141,9 +149,17 @@ pub fn insert_context(rec: &ContextRecord) -> Result<()> {
     with_db(|db| {
         db.conn
             .execute(
-                "INSERT INTO contexts(ts, app, app_raw, display, items) \
-                 VALUES (?1, ?2, ?3, ?4, ?5)",
-                params![rec.ts, rec.app, rec.app_raw, rec.display, items],
+                "INSERT INTO contexts(ts, local_time, tz_name, app, app_raw, display, items) \
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                params![
+                    rec.ts,
+                    rec.local_time,
+                    rec.tz_name,
+                    rec.app,
+                    rec.app_raw,
+                    rec.display,
+                    items
+                ],
             )
             .context("inserting context")?;
         Ok(())
@@ -154,15 +170,17 @@ pub fn insert_context(rec: &ContextRecord) -> Result<()> {
 pub fn query_text(start_ms: i64, end_ms: i64) -> Result<Vec<Record>> {
     with_db(|db| {
         let mut stmt = db.conn.prepare(
-            "SELECT ts, app, app_raw, text FROM text_records \
+            "SELECT ts, local_time, tz_name, app, app_raw, text FROM text_records \
              WHERE ts BETWEEN ?1 AND ?2 ORDER BY ts",
         )?;
         let rows = stmt.query_map(params![start_ms, end_ms], |r| {
             Ok(Record {
                 ts: r.get(0)?,
-                app: r.get(1)?,
-                app_raw: r.get(2)?,
-                text: r.get(3)?,
+                local_time: r.get(1)?,
+                tz_name: r.get(2)?,
+                app: r.get(3)?,
+                app_raw: r.get(4)?,
+                text: r.get(5)?,
             })
         })?;
         Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
@@ -199,11 +217,11 @@ pub fn query_timeline(
                     |r| r.get(0),
                 )?;
                 let mut stmt = db.conn.prepare(
-                    "SELECT ts, app, app_raw, 'ocr' AS kind, display, items, NULL AS text \
+                    "SELECT ts, local_time, tz_name, app, app_raw, 'ocr' AS kind, display, items, NULL AS text \
                        FROM contexts \
                        WHERE ts BETWEEN ?1 AND ?2 AND (lower(app) = ?3 OR lower(app_raw) = ?3) \
                      UNION ALL \
-                     SELECT ts, app, app_raw, 'keys' AS kind, NULL AS display, NULL AS items, text \
+                     SELECT ts, local_time, tz_name, app, app_raw, 'keys' AS kind, NULL AS display, NULL AS items, text \
                        FROM text_records \
                        WHERE ts BETWEEN ?1 AND ?2 AND (lower(app) = ?3 OR lower(app_raw) = ?3) \
                      ORDER BY ts LIMIT ?4 OFFSET ?5",
@@ -223,11 +241,11 @@ pub fn query_timeline(
                     |r| r.get(0),
                 )?;
                 let mut stmt = db.conn.prepare(
-                    "SELECT ts, app, app_raw, 'ocr' AS kind, display, items, NULL AS text \
+                    "SELECT ts, local_time, tz_name, app, app_raw, 'ocr' AS kind, display, items, NULL AS text \
                        FROM contexts \
                        WHERE ts BETWEEN ?1 AND ?2 \
                      UNION ALL \
-                     SELECT ts, app, app_raw, 'keys' AS kind, NULL AS display, NULL AS items, text \
+                     SELECT ts, local_time, tz_name, app, app_raw, 'keys' AS kind, NULL AS display, NULL AS items, text \
                        FROM text_records \
                        WHERE ts BETWEEN ?1 AND ?2 \
                      ORDER BY ts LIMIT ?3 OFFSET ?4",
@@ -322,27 +340,29 @@ fn with_db<T>(f: impl FnOnce(&Db) -> Result<T>) -> Result<T> {
 }
 
 /// Map a merged timeline row (see [`query_timeline`]) into a `TimelineRecord`.
-/// Columns: 0 ts, 1 app, 2 app_raw, 3 kind, 4 display, 5 items(JSON), 6 text.
-/// Only the columns the row's `kind` populates are read; a corrupt OCR items blob
-/// degrades to an empty item list rather than erroring.
+/// Columns: 0 ts, 1 local_time, 2 tz_name, 3 app, 4 app_raw, 5 kind, 6 display,
+/// 7 items(JSON), 8 text. Only the columns the row's `kind` populates are read;
+/// a corrupt OCR items blob degrades to an empty item list rather than erroring.
 fn row_to_timeline(r: &Row) -> rusqlite::Result<TimelineRecord> {
-    let kind: String = r.get(3)?;
+    let kind: String = r.get(5)?;
     let (kind, display, items, text) = if kind == "ocr" {
-        let items_json: String = r.get(5)?;
+        let items_json: String = r.get(7)?;
         let items: Vec<OcrItem> = serde_json::from_str(&items_json).unwrap_or_default();
-        (TimelineKind::Ocr, r.get::<_, Option<u32>>(4)?, items, None)
+        (TimelineKind::Ocr, r.get::<_, Option<u32>>(6)?, items, None)
     } else {
         (
             TimelineKind::Keys,
             None,
             Vec::new(),
-            r.get::<_, Option<String>>(6)?,
+            r.get::<_, Option<String>>(8)?,
         )
     };
     Ok(TimelineRecord {
         ts: r.get(0)?,
-        app: r.get(1)?,
-        app_raw: r.get(2)?,
+        local_time: r.get(1)?,
+        tz_name: r.get(2)?,
+        app: r.get(3)?,
+        app_raw: r.get(4)?,
         kind,
         display,
         items,
@@ -351,22 +371,31 @@ fn row_to_timeline(r: &Row) -> rusqlite::Result<TimelineRecord> {
 }
 
 /// Create tables/indices if missing (idempotent — runs on every open).
+///
+/// Every event carries three time columns so it stays interpretable after the
+/// user crosses timezones: `ts` (epoch ms, the UTC instant, used for ordering),
+/// `local_time` (local wall-clock without offset), and `tz_name` (IANA zone).
+/// Every insert populates all three, so the text columns are plain `NOT NULL`.
 fn migrate(conn: &Connection) -> Result<()> {
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS text_records (
-             ts      INTEGER NOT NULL,
-             app     TEXT    NOT NULL,
-             app_raw TEXT    NOT NULL,
-             text    TEXT    NOT NULL
+             ts         INTEGER NOT NULL,
+             local_time TEXT    NOT NULL,
+             tz_name    TEXT    NOT NULL,
+             app        TEXT    NOT NULL,
+             app_raw    TEXT    NOT NULL,
+             text       TEXT    NOT NULL
          );
          CREATE INDEX IF NOT EXISTS idx_text_ts ON text_records(ts);
 
          CREATE TABLE IF NOT EXISTS contexts (
-             ts      INTEGER NOT NULL,
-             app     TEXT    NOT NULL,
-             app_raw TEXT    NOT NULL,
-             display INTEGER NOT NULL,
-             items   TEXT    NOT NULL
+             ts         INTEGER NOT NULL,
+             local_time TEXT    NOT NULL,
+             tz_name    TEXT    NOT NULL,
+             app        TEXT    NOT NULL,
+             app_raw    TEXT    NOT NULL,
+             display    INTEGER NOT NULL,
+             items      TEXT    NOT NULL
          );
          CREATE INDEX IF NOT EXISTS idx_ctx_ts ON contexts(ts);
 
@@ -387,6 +416,8 @@ mod tests {
     fn ctx(ts: i64, app: &str, texts: &[&str]) -> ContextRecord {
         ContextRecord {
             ts,
+            local_time: "2026-07-05T12:00:00.000".to_string(),
+            tz_name: "Asia/Shanghai".to_string(),
             app: app.to_string(),
             app_raw: app.to_string(),
             display: 0,
@@ -407,6 +438,8 @@ mod tests {
     fn rec(ts: i64, app: &str, text: &str) -> Record {
         Record {
             ts,
+            local_time: "2026-07-05T12:00:00.000".to_string(),
+            tz_name: "Asia/Shanghai".to_string(),
             app: app.to_string(),
             app_raw: app.to_string(),
             text: text.to_string(),

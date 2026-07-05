@@ -19,6 +19,7 @@ use objc2::runtime::{NSObjectProtocol, ProtocolObject};
 mod app_monitor;
 mod callbacks;
 mod capture;
+mod clock;
 mod context_store;
 mod db;
 mod engine;
@@ -58,20 +59,24 @@ fn remove_observer() {
 
 // ---- napi value types ------------------------------------------------------
 
-/// Capture configuration passed from the main process at `start`.
+/// Capture configuration passed from the main process at `start`. The JS side
+/// drives the (now adaptive) capture timer, reading `last_activity_ms` to choose
+/// the interval, so no cadence is passed down here.
 #[napi(object)]
 pub struct EngineConfig {
     /// Absolute data directory (e.g. `<userData>/pi0-data`).
     pub data_dir: String,
-    /// Snapshot interval in ms (the JS side drives the timer; kept for parity).
-    pub interval_ms: u32,
 }
 
 /// A keystroke record returned by `query_text` (maps to zod `TextRecordSchema`).
 #[napi(object)]
 pub struct TextRecord {
-    /// Epoch milliseconds (JS number).
+    /// Epoch milliseconds (JS number) — the UTC instant.
     pub ts: f64,
+    /// Local wall-clock at `ts`, ISO-8601 without offset.
+    pub local_time: String,
+    /// IANA timezone name the record was captured in.
+    pub tz_name: String,
     pub app: String,
     pub app_raw: String,
     pub text: String,
@@ -81,6 +86,8 @@ impl From<Record> for TextRecord {
     fn from(r: Record) -> Self {
         Self {
             ts: r.ts as f64,
+            local_time: r.local_time,
+            tz_name: r.tz_name,
             app: r.app,
             app_raw: r.app_raw,
             text: r.text,
@@ -157,6 +164,19 @@ pub fn is_running() -> bool {
         .map_or(false, |h| h.is_running())
 }
 
+/// Epoch milliseconds of the most recent input activity — a keystroke or mouse
+/// movement — seen by the HID thread, or `0` when the engine isn't running. The
+/// JS side compares this against its idle-timeout window to pick the adaptive
+/// capture interval (active vs idle). Returned as an f64 for JS number parity.
+#[napi]
+pub fn last_activity_ms() -> f64 {
+    engine_slot()
+        .lock()
+        .unwrap()
+        .as_ref()
+        .map_or(0.0, |h| h.shared.last_activity_ms() as f64)
+}
+
 // ---- database (encrypted store) --------------------------------------------
 
 /// Whether an encrypted pi0 database already exists under `dataDir` (i.e. this
@@ -225,6 +245,8 @@ impl Task for CaptureTask {
             ocr::enqueue_shot(ocr::PendingShot {
                 png_path: shot.path,
                 ts: shot.ts,
+                local_time: shot.local_time,
+                tz_name: shot.tz_name,
                 app: self.app.sanitized.clone(),
                 app_raw: self.app.raw.clone(),
                 display: shot.display,
@@ -303,6 +325,10 @@ pub struct OcrItem {
 pub struct TimelineRecord {
     /// Epoch milliseconds — the screenshot instant (OCR) or buffer start (keys).
     pub ts: f64,
+    /// Local wall-clock at `ts`, ISO-8601 without offset.
+    pub local_time: String,
+    /// IANA timezone name the record was captured in.
+    pub tz_name: String,
     pub app: String,
     pub app_raw: String,
     /// `"ocr"` (screen context) or `"keys"` (keystroke record).
@@ -339,6 +365,8 @@ impl From<context_store::TimelineRecord> for TimelineRecord {
         };
         Self {
             ts: r.ts as f64,
+            local_time: r.local_time,
+            tz_name: r.tz_name,
             app: r.app,
             app_raw: r.app_raw,
             kind,

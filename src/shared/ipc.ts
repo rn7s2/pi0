@@ -5,6 +5,8 @@ import type { PermissionKind, PermissionStatus, Settings, Theme } from './schema
 export const IPC = {
     getSettings: 'pi0:getSettings',
     saveSettings: 'pi0:saveSettings',
+    /** Renderer → main: the app version (for the About section). */
+    getAppVersion: 'pi0:getAppVersion',
     startCapture: 'pi0:startCapture',
     stopCapture: 'pi0:stopCapture',
     isRunning: 'pi0:isRunning',
@@ -56,6 +58,8 @@ export type McpInfo = { token: string; url: string; running: boolean };
 export interface Pi0Api {
     getSettings(): Promise<Settings>;
     saveSettings(settings: Partial<Settings>): Promise<Settings>;
+    /** The app version string (from package.json), shown in Settings → About. */
+    getAppVersion(): Promise<string>;
     startCapture(): Promise<StartResult>;
     stopCapture(): Promise<{ running: boolean }>;
     isRunning(): Promise<boolean>;

@@ -1,7 +1,7 @@
 {
     "name": "pi0",
     "productName": "pi0",
-    "version": "1.0.1",
+    "version": "1.1.0",
     "description": "A personal intelligence workbench for macOS — captures your activity, OCRs it on-device into an encrypted local store, and exposes it to AI agents over a local MCP server.",
     "main": ".webpack/main",
     "private": true,
@@ -11,8 +11,9 @@
         "make": "electron-forge make",
         "publish": "electron-forge publish",
         "lint": "eslint --ext .ts,.tsx .",
-        "format": "prettier --write .",
-        "format:check": "prettier --check .",
+        "format": "prettier --write . && npm run format:rust",
+        "format:check": "prettier --check . && npm run format:rust -- --check",
+        "format:rust": "cargo fmt --manifest-path native/Cargo.toml --",
         "build:native": "npm run build --prefix native"
     },
     "keywords": [],

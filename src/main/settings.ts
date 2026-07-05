@@ -23,7 +23,9 @@ export async function loadSettings(): Promise<Settings> {
     try {
         const raw = await fs.readFile(settingsPath(), 'utf8');
         // Saved values win over the default dataDir; zod fills any missing fields.
-        const parsed = SettingsSchema.safeParse({ dataDir, ...JSON.parse(raw) });
+        const parsed = SettingsSchema.safeParse(
+            migrateLegacyInterval({ dataDir, ...JSON.parse(raw) }),
+        );
         if (parsed.success) {
             return parsed.data;
         }
@@ -32,6 +34,18 @@ export async function loadSettings(): Promise<Settings> {
         // Missing file → defaults.
     }
     return SettingsSchema.parse({ dataDir });
+}
+
+/**
+ * Carry a pre-M5 single `intervalMs` onto the new `activeIntervalMs` when the
+ * split active/idle fields aren't present yet, so upgrading users keep the
+ * cadence they chose instead of silently resetting to the default.
+ */
+function migrateLegacyInterval(raw: Record<string, unknown>): Record<string, unknown> {
+    if ('intervalMs' in raw && !('activeIntervalMs' in raw)) {
+        return { ...raw, activeIntervalMs: raw.intervalMs };
+    }
+    return raw;
 }
 
 /** Validate and persist settings; returns the normalized value. */

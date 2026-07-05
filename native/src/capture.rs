@@ -21,6 +21,7 @@ use objc2_screen_capture_kit::{
     SCWindow,
 };
 
+use crate::clock;
 use crate::paths;
 use crate::state::AppName;
 
@@ -35,6 +36,10 @@ pub struct WrittenShot {
     pub display: u32,
     /// Epoch ms of the capture (shared across a multi-display set).
     pub ts: i64,
+    /// Local wall-clock at `ts`, ISO-8601 without offset (shared across the set).
+    pub local_time: String,
+    /// IANA timezone name the capture happened in (shared across the set).
+    pub tz_name: String,
 }
 
 /// Capture **all attached displays** and write a PNG per display flat under
@@ -43,16 +48,23 @@ pub struct WrittenShot {
 /// contextualised. Returns the written files with their metadata.
 pub fn capture_to_file(data_dir: &Path, app: &AppName) -> Result<Vec<WrittenShot>> {
     let shots = capture_all_displays_png()?;
-    let ts = paths::now_ms();
+    // One stamp for the whole multi-display set so they share ts/local time/zone.
+    let stamp = clock::stamp();
     let dir = paths::app_dir(data_dir, &app.sanitized);
     std::fs::create_dir_all(&dir)?;
 
     let mut written = Vec::with_capacity(shots.len());
     for (index, png) in &shots {
         let display = *index as u32;
-        let path = paths::shot_path(data_dir, &app.sanitized, ts, display);
+        let path = paths::shot_path(data_dir, &app.sanitized, stamp.ts, display);
         std::fs::write(&path, png)?;
-        written.push(WrittenShot { path, display, ts });
+        written.push(WrittenShot {
+            path,
+            display,
+            ts: stamp.ts,
+            local_time: stamp.local_time.clone(),
+            tz_name: stamp.tz_name.clone(),
+        });
     }
     Ok(written)
 }

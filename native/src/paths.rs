@@ -5,16 +5,9 @@
 
 use std::path::{Path, PathBuf};
 
-use chrono::Local;
-
 /// Max byte length for a sanitized app-name folder (well under the 255-byte
 /// filesystem limit, leaving room for nested paths).
 const MAX_APP_NAME_BYTES: usize = 100;
-
-/// Current time as epoch milliseconds.
-pub fn now_ms() -> i64 {
-    Local::now().timestamp_millis()
-}
 
 /// `<data_dir>/<app>/` — the per-app folder holding that app's pending shots.
 pub fn app_dir(data_dir: &Path, app_sanitized: &str) -> PathBuf {
