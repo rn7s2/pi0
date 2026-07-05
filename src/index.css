@@ -76,6 +76,34 @@ body {
     color: var(--color-text-3);
 }
 
+/* Appearance: icon + text on the left, segmented control on the right */
+.theme-field {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    flex-wrap: wrap;
+}
+.theme-field-label {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+.theme-field-icon {
+    font-size: 20px;
+    color: var(--color-text-2);
+    flex: none;
+}
+
+/* links inside settings (About section) — track the Arco theme */
+.settings-scroll a {
+    color: rgb(var(--primary-6));
+    text-decoration: none;
+}
+.settings-scroll a:hover {
+    text-decoration: underline;
+}
+
 /* ---- permission guard modal ---- */
 .guard-perm-head {
     display: flex;

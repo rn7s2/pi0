@@ -150,6 +150,55 @@ button.fp-row.danger:hover {
     transform: translateX(14px);
 }
 
+/* a row that isn't itself a control (holds its own widget on the right) */
+.fp-row.fp-static {
+    cursor: default;
+}
+
+/* segmented appearance slider: three icon segments with a sliding thumb */
+.fp-seg {
+    --fp-seg-w: 30px;
+    position: relative;
+    display: flex;
+    flex: none;
+    padding: 2px;
+    border-radius: 8px;
+    background: var(--color-fill-2);
+}
+.fp-seg-thumb {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: var(--fp-seg-w);
+    height: 22px;
+    border-radius: 6px;
+    background: rgb(var(--primary-6));
+    transform: translateX(calc(var(--fp-seg-index) * var(--fp-seg-w)));
+    transition: transform 0.18s ease;
+}
+.fp-seg-btn {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--fp-seg-w);
+    height: 22px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--color-text-3);
+    font-size: 14px;
+    cursor: pointer;
+    transition: color 0.15s ease;
+}
+.fp-seg-btn:hover {
+    color: var(--color-text-1);
+}
+.fp-seg-btn.on {
+    color: #fff;
+}
+
 .fp-divider {
     height: 1px;
     margin: 6px 10px;

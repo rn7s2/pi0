@@ -18,6 +18,13 @@ const api: Pi0Api = {
     permissionsStatus: () => ipcRenderer.invoke(IPC.permissionsStatus),
     requestPermission: (kind) => ipcRenderer.invoke(IPC.requestPermission, kind),
     openPermissionSettings: (kind) => ipcRenderer.invoke(IPC.openPermissionSettings, kind),
+    openExternal: (url) => ipcRenderer.invoke(IPC.openExternal, url),
+    setTheme: (theme) => ipcRenderer.invoke(IPC.setTheme, theme),
+    onThemeChanged: (cb) => {
+        const listener = (_event: unknown, theme: Parameters<typeof cb>[0]) => cb(theme);
+        ipcRenderer.on(IPC.themeChanged, listener);
+        return () => ipcRenderer.removeListener(IPC.themeChanged, listener);
+    },
     toggleMainWindow: () => ipcRenderer.invoke(IPC.toggleMainWindow),
     quitApp: () => ipcRenderer.invoke(IPC.quitApp),
     relaunchApp: () => ipcRenderer.invoke(IPC.relaunchApp),

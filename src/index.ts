@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Menu, screen, shell, Tray } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu, nativeTheme, screen, shell, Tray } from 'electron';
 import * as native from '@pi0/native';
 
 import { McpHandle, startMcpServer } from './main/mcp/server';
@@ -18,6 +18,7 @@ import {
     PermissionKindSchema,
     PermissionStatus,
     Settings,
+    ThemeSchema,
 } from './shared/schemas';
 
 // Magic constants injected by Forge's Webpack plugin (one pair per entry point).
@@ -404,6 +405,33 @@ function bootstrap(): void {
             await shell.openExternal(SETTINGS_URL[kind]);
         });
 
+        ipcMain.handle(IPC.openExternal, async (_event, rawUrl) => {
+            // Only ever hand http(s) URLs to the OS — never file:// or custom schemes.
+            const url = new URL(String(rawUrl));
+            if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+                throw new Error(`Refusing to open non-http(s) URL: ${url.protocol}`);
+            }
+            await shell.openExternal(url.toString());
+        });
+
+        ipcMain.handle(IPC.setTheme, async (_event, rawTheme) => {
+            const theme = ThemeSchema.parse(rawTheme);
+            // Setting the source flips prefers-color-scheme in every window at
+            // once; renderers re-mirror it (no per-window message needed for the
+            // visual). The broadcast below only keeps the other window's *control*
+            // (radio / segmented slider) in sync with the chosen value.
+            nativeTheme.themeSource = theme;
+            settings = await saveSettings({
+                ...(settings ?? { dataDir: defaultDataDir() }),
+                theme,
+            });
+            for (const win of [mainWindow, panelWindow]) {
+                if (win && !win.isDestroyed()) {
+                    win.webContents.send(IPC.themeChanged, theme);
+                }
+            }
+        });
+
         ipcMain.handle(IPC.toggleMainWindow, () => toggleMainWindow());
 
         ipcMain.handle(IPC.quitApp, () => {
@@ -434,6 +462,9 @@ function bootstrap(): void {
 
     app.on('ready', async () => {
         settings = await loadSettings();
+        // Drive the OS colour scheme for every window; renderers just mirror
+        // prefers-color-scheme (see src/app/theme.ts).
+        nativeTheme.themeSource = settings.theme;
         // Start as an accessory (no dock icon); the main window's show/hide keeps
         // the dock in sync from here on. The MCP server waits for the store to be
         // unlocked (see the unlock IPC handler).

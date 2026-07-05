@@ -1,5 +1,22 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { IconPoweroff, IconRight, IconSettings } from '@arco-design/web-react/icon';
+import type { CSSProperties } from 'react';
+import {
+    IconDesktop,
+    IconMoon,
+    IconPoweroff,
+    IconRight,
+    IconSettings,
+    IconSun,
+} from '@arco-design/web-react/icon';
+
+import type { Theme } from '../shared/schemas';
+
+/** Appearance options, in slider order (left → right). */
+const THEME_OPTIONS: { value: Theme; label: string; Icon: typeof IconDesktop }[] = [
+    { value: 'system', label: 'System', Icon: IconDesktop },
+    { value: 'light', label: 'Light', Icon: IconSun },
+    { value: 'dark', label: 'Dark', Icon: IconMoon },
+];
 
 /**
  * Tray float panel. Three rows, per the milestone:
@@ -12,12 +29,24 @@ export function FloatPanel() {
     const [running, setRunning] = useState(false);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [theme, setTheme] = useState<Theme>('system');
     const cardRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         void window.pi0.isRunning().then(setRunning);
-        // Stay in sync when recording is toggled from the main window.
-        return window.pi0.onRunningChanged(setRunning);
+        void window.pi0.getSettings().then((s) => setTheme(s.theme));
+        // Stay in sync when recording / theme is changed from the main window.
+        const offRunning = window.pi0.onRunningChanged(setRunning);
+        const offTheme = window.pi0.onThemeChanged(setTheme);
+        return () => {
+            offRunning();
+            offTheme();
+        };
+    }, []);
+
+    const changeTheme = useCallback((next: Theme) => {
+        setTheme(next); // optimistic; main echoes it back via onThemeChanged
+        void window.pi0.setTheme(next);
     }, []);
 
     // Size the window to the card's real height so the panel hugs its content
@@ -49,6 +78,9 @@ export function FloatPanel() {
         }
     }, [running]);
 
+    const themeIndex = THEME_OPTIONS.findIndex((t) => t.value === theme);
+    const ThemeIcon = THEME_OPTIONS[themeIndex]?.Icon ?? IconDesktop;
+
     return (
         <div className="fp" ref={cardRef}>
             <button className="fp-row" onClick={() => void window.pi0.toggleMainWindow()}>
@@ -79,6 +111,34 @@ export function FloatPanel() {
                     <span className="fp-knob" />
                 </span>
             </button>
+
+            <div className="fp-row fp-static">
+                <span className="fp-icon">
+                    <ThemeIcon />
+                </span>
+                <span className="fp-label">Theme</span>
+                <div
+                    className="fp-seg"
+                    role="radiogroup"
+                    aria-label="Theme"
+                    style={{ '--fp-seg-index': themeIndex } as CSSProperties}
+                >
+                    <span className="fp-seg-thumb" aria-hidden="true" />
+                    {THEME_OPTIONS.map(({ value, label, Icon }) => (
+                        <button
+                            key={value}
+                            className={`fp-seg-btn ${theme === value ? 'on' : ''}`}
+                            role="radio"
+                            aria-checked={theme === value}
+                            aria-label={label}
+                            title={label}
+                            onClick={() => changeTheme(value)}
+                        >
+                            <Icon />
+                        </button>
+                    ))}
+                </div>
+            </div>
 
             <div className="fp-divider" />
 

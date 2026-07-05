@@ -1,18 +1,28 @@
 import { useEffect, useMemo, useState } from 'react';
+import type { MouseEvent } from 'react';
 import {
     Alert,
     Button,
     Input,
     InputNumber,
     Message,
+    Radio,
     Space,
     Spin,
     Typography,
 } from '@arco-design/web-react';
-import { IconCopy, IconLock, IconSave, IconUndo } from '@arco-design/web-react/icon';
+import {
+    IconCopy,
+    IconDesktop,
+    IconLock,
+    IconMoon,
+    IconSave,
+    IconSun,
+    IconUndo,
+} from '@arco-design/web-react/icon';
 
 import type { McpInfo } from '../shared/ipc';
-import type { Settings } from '../shared/schemas';
+import type { Settings, Theme } from '../shared/schemas';
 
 /** The subset of settings the Revert/Save footer governs. */
 interface FormState {
@@ -24,6 +34,10 @@ const INTERVAL_MIN = 1;
 const INTERVAL_MAX = 3600;
 const PORT_MIN = 1024;
 const PORT_MAX = 65535;
+
+const REPO_URL = 'https://github.com/rn7s2/pi0';
+const LICENSE = 'MIT';
+const LICENSE_URL = `${REPO_URL}/blob/main/LICENSE`;
 
 const inRange = (v: number | undefined, min: number, max: number): v is number =>
     v !== undefined && Number.isInteger(v) && v >= min && v <= max;
@@ -54,6 +68,9 @@ export function SettingsView() {
     const [saving, setSaving] = useState(false);
     const [mcp, setMcp] = useState<McpInfo | null>(null);
 
+    // Appearance applies immediately (not governed by the Revert/Save footer).
+    const [theme, setThemeState] = useState<Theme>('system');
+
     // Password-reset section (independent of the Revert/Save footer).
     const [currentPw, setCurrentPw] = useState('');
     const [newPw, setNewPw] = useState('');
@@ -68,9 +85,17 @@ export function SettingsView() {
             setSaved(form);
             setIntervalSec(form.intervalSec);
             setMcpPort(form.mcpPort);
+            setThemeState(s.theme);
         });
         void window.pi0.getMcpInfo().then(setMcp);
+        // Reflect a change made from the tray panel while this window is open.
+        return window.pi0.onThemeChanged(setThemeState);
     }, []);
+
+    const changeTheme = (next: Theme) => {
+        setThemeState(next); // optimistic; main echoes it back via onThemeChanged
+        void window.pi0.setTheme(next);
+    };
 
     const dirty = useMemo(
         () => !!saved && (intervalSec !== saved.intervalSec || mcpPort !== saved.mcpPort),
@@ -104,6 +129,11 @@ export function SettingsView() {
         } finally {
             setSaving(false);
         }
+    };
+
+    const openExternal = (url: string) => (e: MouseEvent) => {
+        e.preventDefault();
+        void window.pi0.openExternal(url);
     };
 
     const copy = async (label: string, text: string) => {
@@ -145,14 +175,49 @@ export function SettingsView() {
         return <Spin loading style={{ display: 'block', marginTop: 40 }} />;
     }
 
+    const ThemeIcon = theme === 'light' ? IconSun : theme === 'dark' ? IconMoon : IconDesktop;
+
     return (
         <div className="settings">
             <div className="settings-scroll">
-                {/* ---- Capture settings ---- */}
+                {/* ---- Appearance ---- */}
                 <section className="settings-section">
                     <Typography.Title heading={5} style={{ marginTop: 0 }}>
-                        Capture settings
+                        Appearance
                     </Typography.Title>
+                    <div className="field theme-field">
+                        <div className="theme-field-label">
+                            <ThemeIcon className="theme-field-icon" />
+                            <div>
+                                <div className="field-label" style={{ marginBottom: 2 }}>
+                                    Theme
+                                </div>
+                                <div className="field-hint" style={{ marginTop: 0 }}>
+                                    System follows your macOS light/dark setting.
+                                </div>
+                            </div>
+                        </div>
+                        <Radio.Group
+                            type="button"
+                            value={theme}
+                            onChange={(v) => changeTheme(v as Theme)}
+                        >
+                            <Radio value="system">
+                                <IconDesktop /> System
+                            </Radio>
+                            <Radio value="light">
+                                <IconSun /> Light
+                            </Radio>
+                            <Radio value="dark">
+                                <IconMoon /> Dark
+                            </Radio>
+                        </Radio.Group>
+                    </div>
+                </section>
+
+                {/* ---- Capture settings ---- */}
+                <section className="settings-section">
+                    <Typography.Title heading={5}>Capture settings</Typography.Title>
                     <div className="field">
                         <div className="field-label">Screenshot interval</div>
                         <InputNumber
@@ -259,6 +324,31 @@ export function SettingsView() {
                             Change password
                         </Button>
                     </Space>
+                </section>
+
+                {/* ---- About ---- */}
+                <section className="settings-section">
+                    <Typography.Title heading={5}>About pi0</Typography.Title>
+                    <div className="field">
+                        <div className="field-label">Source</div>
+                        <Space size="medium">
+                            <a href={REPO_URL} onClick={openExternal(REPO_URL)}>
+                                {REPO_URL}
+                            </a>
+                            <Typography.Text type="secondary">
+                                {LICENSE} License{' — '}
+                                <a href={LICENSE_URL} onClick={openExternal(LICENSE_URL)}>
+                                    read it
+                                </a>
+                            </Typography.Text>
+                        </Space>
+                    </div>
+                    <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
+                        pi0 runs entirely on your Mac. Nothing you capture ever leaves the device on
+                        its own — your data can only be read by the AI agents you choose to connect,
+                        over the local MCP server. It&apos;s free and open source, released to give
+                        everyone a smarter way to work and live, and it&apos;s 100% free to use.
+                    </Typography.Paragraph>
                 </section>
             </div>
 

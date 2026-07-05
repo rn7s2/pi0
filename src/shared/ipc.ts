@@ -1,5 +1,5 @@
 // IPC contract shared by main, preload, and renderer.
-import type { PermissionKind, PermissionStatus, Settings } from './schemas';
+import type { PermissionKind, PermissionStatus, Settings, Theme } from './schemas';
 
 /** IPC channel names (namespaced to avoid collisions). */
 export const IPC = {
@@ -19,6 +19,12 @@ export const IPC = {
     permissionsStatus: 'pi0:permissionsStatus',
     requestPermission: 'pi0:requestPermission',
     openPermissionSettings: 'pi0:openPermissionSettings',
+    /** Renderer → main: open an http(s) URL in the user's default browser. */
+    openExternal: 'pi0:openExternal',
+    /** Renderer → main: set the appearance (system/light/dark) and persist it. */
+    setTheme: 'pi0:setTheme',
+    /** Main → renderer broadcast: the appearance choice changed. */
+    themeChanged: 'pi0:themeChanged',
     toggleMainWindow: 'pi0:toggleMainWindow',
     quitApp: 'pi0:quitApp',
     relaunchApp: 'pi0:relaunchApp',
@@ -66,6 +72,15 @@ export interface Pi0Api {
     requestPermission(kind: PermissionKind): Promise<PermissionStatus>;
     /** Open the relevant System Settings > Privacy pane for a grant. */
     openPermissionSettings(kind: PermissionKind): Promise<void>;
+    /** Open an http(s) URL in the user's default browser. */
+    openExternal(url: string): Promise<void>;
+    /** Set the appearance (system/light/dark); persists and applies immediately. */
+    setTheme(theme: Theme): Promise<void>;
+    /**
+     * Subscribe to appearance changes broadcast by the main process (e.g. the
+     * theme was changed from the other window). Returns an unsubscribe function.
+     */
+    onThemeChanged(cb: (theme: Theme) => void): () => void;
     /** Show the main window if hidden, hide it if visible. */
     toggleMainWindow(): Promise<void>;
     /** Quit the whole application (stops capture first). */

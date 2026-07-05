@@ -6,10 +6,20 @@ import { z } from 'zod';
 /** Default localhost port the MCP server listens on. */
 export const DEFAULT_MCP_PORT = 31415;
 
+/**
+ * Appearance choice. `system` follows the OS light/dark setting; `light`/`dark`
+ * pin it. Applied by the main process via Electron's `nativeTheme.themeSource`,
+ * which every window mirrors through `prefers-color-scheme`.
+ */
+export const ThemeSchema = z.enum(['system', 'light', 'dark']);
+export type Theme = z.infer<typeof ThemeSchema>;
+
 /** User settings, persisted to `<userData>/settings.json`. */
 export const SettingsSchema = z.object({
     /** Absolute directory where recorded data is written. */
     dataDir: z.string().min(1),
+    /** Appearance: follow the system, or pin light/dark. */
+    theme: ThemeSchema.default('system'),
     /**
      * Screenshot interval in milliseconds (1s – 1h). Screenshots are mandatory
      * in M3 — they feed the on-device OCR that produces the context store — so
