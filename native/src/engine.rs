@@ -107,8 +107,9 @@ fn hid_thread_main(
 
     let manager = IOHIDManager::new(None, kIOHIDOptionsTypeNone);
 
-    // Match Generic-Desktop keyboards/keypads (keystrokes) plus mice/pointers
-    // (movement deltas → activity signal for the adaptive capture interval).
+    // Match Generic-Desktop keyboards/keypads (keystrokes) plus mice/pointers.
+    // Matched pointer devices also deliver their scroll-wheel and button
+    // elements, all of which feed the activity signal for the adaptive interval.
     let matches = [
         matching_dict(kHIDPage_GenericDesktop, kHIDUsage_GD_Keyboard),
         matching_dict(kHIDPage_GenericDesktop, kHIDUsage_GD_Keypad),

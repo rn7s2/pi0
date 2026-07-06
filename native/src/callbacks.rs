@@ -7,19 +7,29 @@ use std::ffi::c_void;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::ptr::NonNull;
 
-use objc2_io_kit::{IOHIDValue, IOReturn};
+use objc2_io_kit::{
+    kHIDPage_Button, kHIDPage_GenericDesktop, kHIDPage_KeyboardOrKeypad, kHIDUsage_GD_Wheel,
+    kHIDUsage_GD_X, kHIDUsage_GD_Y, IOHIDValue, IOReturn,
+};
 
 use crate::clock;
 use crate::keymap::{self, KeyKind};
 use crate::state::HidState;
 
+// HID usage pages / usages, aliased from Apple's IOKit usage-table constants
+// (objc2_io_kit re-exports of <IOKit/hid/IOHIDUsageTables.h>, which mirror the
+// USB-IF "HID Usage Tables" spec) so the values are traceable, not bare hex.
+
 /// HID element usage page for keyboard/keypad keys.
-const KEYBOARD_USAGE_PAGE: u32 = 0x07;
-/// HID Generic Desktop usage page — carries mouse/pointer motion (X/Y).
-const GENERIC_DESKTOP_PAGE: u32 = 0x01;
-/// Generic Desktop usages for pointer motion deltas.
-const USAGE_X: u32 = 0x30;
-const USAGE_Y: u32 = 0x31;
+const KEYBOARD_USAGE_PAGE: u32 = kHIDPage_KeyboardOrKeypad;
+/// HID Generic Desktop usage page — carries mouse/pointer motion and the wheel.
+const GENERIC_DESKTOP_PAGE: u32 = kHIDPage_GenericDesktop;
+/// HID Button usage page — mouse/trackpad button presses.
+const BUTTON_USAGE_PAGE: u32 = kHIDPage_Button;
+/// Generic Desktop relative-delta usages: pointer X, pointer Y, scroll wheel.
+const USAGE_X: u32 = kHIDUsage_GD_X;
+const USAGE_Y: u32 = kHIDUsage_GD_Y;
+const USAGE_WHEEL: u32 = kHIDUsage_GD_Wheel;
 
 /// Recover the `HidState` from the C `context` pointer.
 ///
@@ -49,12 +59,24 @@ fn handle_input_value(state: &HidState, value: &IOHIDValue) {
     let element = value.element();
     let usage_page = element.usage_page();
 
-    // Mouse/pointer movement: a non-zero relative delta on the Generic Desktop
-    // X or Y axis. Counts as activity (keeps capture in the active cadence) but
-    // is never recorded — only the last-activity clock is bumped.
+    // Pointer motion (mouse or trackpad cursor) and scroll-wheel spins both live
+    // on the Generic Desktop page as non-zero relative deltas. Either one counts
+    // as activity (keeps capture in the active cadence) but is never recorded —
+    // only the last-activity clock is bumped. Zoom/rotate gestures are delivered
+    // elsewhere (not Generic Desktop) and are intentionally not tracked here.
     if usage_page == GENERIC_DESKTOP_PAGE {
         let usage = element.usage();
-        if (usage == USAGE_X || usage == USAGE_Y) && value.integer_value() != 0 {
+        let is_motion = usage == USAGE_X || usage == USAGE_Y || usage == USAGE_WHEEL;
+        if is_motion && value.integer_value() != 0 {
+            state.mark_activity(clock::now_ms());
+        }
+        return;
+    }
+
+    // Mouse/trackpad button presses: a click with no cursor motion would
+    // otherwise read as idle. Bump the clock on press (non-zero value) only.
+    if usage_page == BUTTON_USAGE_PAGE {
+        if value.integer_value() != 0 {
             state.mark_activity(clock::now_ms());
         }
         return;

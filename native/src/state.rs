@@ -112,7 +112,7 @@ impl HidState {
         self.capslock.set(!self.capslock.get());
     }
 
-    /// Record input activity (keystroke or mouse movement) at `now_ms` on the
+    /// Record input activity (keystroke, pointer/scroll motion, or button) at `now_ms` on the
     /// shared clock the JS side reads to choose the adaptive capture interval.
     pub fn mark_activity(&self, now_ms: i64) {
         self.shared.mark_activity(now_ms);

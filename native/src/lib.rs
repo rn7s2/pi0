@@ -164,8 +164,9 @@ pub fn is_running() -> bool {
         .map_or(false, |h| h.is_running())
 }
 
-/// Epoch milliseconds of the most recent input activity — a keystroke or mouse
-/// movement — seen by the HID thread, or `0` when the engine isn't running. The
+/// Epoch milliseconds of the most recent input activity — a keystroke, pointer
+/// or scroll-wheel motion, or a button press — seen by the HID thread, or `0`
+/// when the engine isn't running. The
 /// JS side compares this against its idle-timeout window to pick the adaptive
 /// capture interval (active vs idle). Returned as an f64 for JS number parity.
 #[napi]
